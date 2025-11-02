@@ -10,6 +10,10 @@ This document provides a comprehensive overview of all Cursor rules and their lo
 │   ├── rules/                    # Cursor Rules (TO BE CREATED)
 │   ├── workflows/                # Development Workflows (TO BE CREATED)
 │   └── memory/                   # Memory Bank (TO BE CREATED)
+├── .kluster/                     # Kluster.ai Code Review Integration
+│   ├── README.md                 # Integration guide and setup
+│   ├── rules.md                  # Project-specific validation rules
+│   └── context.md                # Codebase architecture and patterns
 ├── adr/                         # Architectural Decision Records (TO BE CREATED)
 └── CLAUDE.md                    # This file
 ```
@@ -317,6 +321,7 @@ The following rules are currently active in the workspace:
 - [x] Agent requestable rules configured
 - [x] Development guidelines established
 - [x] Testing standards defined
+- [x] Kluster.ai integration configured (see `.kluster/` directory)
 
 ### 🚧 To Be Implemented
 - [ ] Create `.cursor/rules/` directory structure
@@ -324,6 +329,109 @@ The following rules are currently active in the workspace:
 - [ ] Create `.cursor/workflows/` directory and workflow files
 - [ ] Create `.cursor/memory/` directory and memory bank files
 - [ ] Create `adr/` directory for architectural decision records
+
+## 🤖 Kluster.ai Code Review Integration
+
+### Overview
+Kluster.ai provides real-time AI-powered code review for the Hyperscape monorepo, automatically validating AI-generated code against project standards. It integrates via MCP (Model Context Protocol) for Claude Code, VS Code, and Cursor.
+
+### Directory Structure
+```
+.kluster/
+├── README.md          # Integration guide and setup instructions
+├── rules.md           # Project-specific validation rules
+└── context.md         # Codebase architecture and patterns
+```
+
+### Key Features
+- **Automatic Review**: Real-time validation as code is generated
+- **Manual Review**: On-demand file-by-file review
+- **Dependency Validation**: Security and compliance checks for packages
+
+### Review Criteria
+Kluster.ai evaluates code across seven dimensions:
+1. **Semantic** - Type safety, incorrect assertions (P0)
+2. **Intent** - Architecture pattern violations (P0-P1)
+3. **Logical** - Control flow errors, edge cases (P1-P2)
+4. **Security** - Credentials, vulnerabilities (P1-P2)
+5. **Knowledge** - Not using existing systems (P2-P3)
+6. **Performance** - Memory leaks, inefficiencies (P2-P3)
+7. **Quality** - Code organization, documentation (P3-P4)
+
+### Priority Levels
+- **P0 (Critical)** - Auto-reject: `any` types, mocks in tests, exposed credentials
+- **P1 (High)** - Architecture violations, missing tests, security issues
+- **P2 (Medium)** - Performance issues, file management problems
+- **P3-P5 (Low)** - Code quality, documentation, minor improvements
+
+### Quick Start
+1. **Install**: See [.kluster/README.md](.kluster/README.md) for installation
+2. **Configure**: Set API key from [platform.kluster.ai](https://platform.kluster.ai)
+3. **Use**: Reference `.kluster/rules.md` when generating code
+
+### Usage Example
+```markdown
+Implement a new cooking skill for the RPG.
+
+Validate against:
+- .kluster/rules.md (TypeScript, Testing, Architecture sections)
+- .kluster/context.md (RPG Implementation patterns)
+
+Ensure zero P0/P1 issues before completing.
+```
+
+### Integration with Development Workflow
+```bash
+# 1. Generate code (with AI)
+# 2. Kluster.ai auto-review (or manual)
+# 3. Fix P0/P1 issues
+# 4. Run tests: npm test
+# 5. Type check: npm run type-check
+# 6. Commit if all pass
+```
+
+### Configuration Files
+
+#### `.kluster/rules.md`
+Comprehensive validation rules covering:
+- TypeScript strict typing requirements
+- Testing standards (real tests, no mocks)
+- Architecture compliance patterns
+- Security requirements
+- Performance standards
+- File management rules
+- Pre-deployment checklist
+
+#### `.kluster/context.md`
+Codebase architecture documentation:
+- Monorepo structure and package organization
+- Hyperscape engine patterns
+- RPG implementation guidelines
+- Testing philosophy and approaches
+- Common patterns and anti-patterns
+- Technology stack details
+
+#### `.kluster/README.md`
+Integration guide including:
+- Setup and installation instructions
+- Usage workflows
+- Configuration recommendations
+- Troubleshooting guide
+- Best practices
+
+### Auto-Reject Scenarios
+Code is immediately rejected (P0) if it contains:
+- `any` or `unknown` types
+- Mock/spy test frameworks
+- Hardcoded API keys or credentials
+- `test.skip()` or incomplete implementations
+- `as any` type casting
+
+### Resources
+- **Setup Guide**: [.kluster/README.md](.kluster/README.md)
+- **Validation Rules**: [.kluster/rules.md](.kluster/rules.md)
+- **Architecture Context**: [.kluster/context.md](.kluster/context.md)
+- **Official Docs**: [docs.kluster.ai](https://docs.kluster.ai)
 
 ## 🎯 Next Steps
 
@@ -350,11 +458,17 @@ The following rules are currently active in the workspace:
 
 ## 📚 Related Documentation
 
+### Core Documentation
 - [README.md](README.md) - Main project documentation
 - [LORE.md](LORE.md) - Game world and lore information
 - [packages/hyperscape/README.md](packages/hyperscape/README.md) - Engine documentation
 - [packages/plugin-hyperscape/README.md](packages/plugin-hyperscape/README.md) - AI agent integration
-- [eslint.config.js](eslint.config.js) - Code quality configuration
+
+### Code Quality & Review
+- [.kluster/README.md](.kluster/README.md) - Kluster.ai integration guide
+- [.kluster/rules.md](.kluster/rules.md) - Code review validation rules
+- [.kluster/context.md](.kluster/context.md) - Codebase architecture context
+- [eslint.config.js](eslint.config.js) - ESLint configuration
 
 ---
 

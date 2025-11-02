@@ -72,5 +72,9 @@ packages/client/dist/models/
 
 
 .cursor/rules/kluster-code-verify.mdc
-.kluster
+# Kluster.ai - ignore local cache but keep documentation
+.kluster/*
+!.kluster/README.md
+!.kluster/rules.md
+!.kluster/context.md
 apps/api/.railway-link.json
