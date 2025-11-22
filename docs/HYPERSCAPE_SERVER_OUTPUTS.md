@@ -430,6 +430,7 @@ export class HyperscapeEventService extends Service {
   capabilityDescription = 'Listens to Hyperscape game events';
 
   private world!: World;
+  private eventHandlers: Map<string, (...args: any[]) => void> = new Map();
 
   static async start(runtime: IAgentRuntime): Promise<HyperscapeEventService> {
     const service = new HyperscapeEventService(runtime);
@@ -440,40 +441,45 @@ export class HyperscapeEventService extends Service {
   private async initialize(): Promise<void> {
     this.world = this.runtime.getService<World>('hyperscape')!;
 
-    // React to player joins
-    this.world.on(EventType.PLAYER_JOINED, async (payload) => {
-      const { playerId, player } = payload;
+    const onPlayerJoined = async (payload: { playerId: string, player: any }) => {
+      const { player } = payload;
       console.log(`Player ${player.data.name} joined!`);
       // Trigger agent greeting or action
-    });
+    };
+    this.world.on(EventType.PLAYER_JOINED, onPlayerJoined);
+    this.eventHandlers.set(EventType.PLAYER_JOINED, onPlayerJoined);
 
-    // React to combat kills
-    this.world.on(EventType.COMBAT_KILL, async (payload) => {
-      const { attackerId, targetId } = payload;
+    const onCombatKill = async (payload: { attackerId: string, targetId: string }) => {
       // Log or react to kills
-    });
+    };
+    this.world.on(EventType.COMBAT_KILL, onCombatKill);
+    this.eventHandlers.set(EventType.COMBAT_KILL, onCombatKill);
 
-    // React to level ups
-    this.world.on(EventType.SKILLS_LEVEL_UP, async (payload) => {
-      const { playerId, skill, newLevel } = payload;
+    const onSkillsLevelUp = async (payload: { playerId: string, skill: string, newLevel: number }) => {
       // Congratulate player or adjust difficulty
-    });
+    };
+    this.world.on(EventType.SKILLS_LEVEL_UP, onSkillsLevelUp);
+    this.eventHandlers.set(EventType.SKILLS_LEVEL_UP, onSkillsLevelUp);
 
-    // React to deaths
-    this.world.on(EventType.PLAYER_DIED, async (payload) => {
-      const { playerId } = payload;
+    const onPlayerDied = async (payload: { playerId: string }) => {
       // Offer assistance or commentary
-    });
+    };
+    this.world.on(EventType.PLAYER_DIED, onPlayerDied);
+    this.eventHandlers.set(EventType.PLAYER_DIED, onPlayerDied);
 
-    // React to chat messages
-    this.world.on(EventType.CHAT_MESSAGE, async (payload) => {
-      const { from, body } = payload;
+    const onChatMessage = async (payload: { from: string, body: string }) => {
       // Process chat for agent responses
-    });
+    };
+    this.world.on(EventType.CHAT_MESSAGE, onChatMessage);
+    this.eventHandlers.set(EventType.CHAT_MESSAGE, onChatMessage);
   }
 
   async stop(): Promise<void> {
     // Cleanup listeners
+    this.eventHandlers.forEach((handler, event) => {
+      this.world.off(event, handler);
+    });
+    this.eventHandlers.clear();
   }
 }
 ```
