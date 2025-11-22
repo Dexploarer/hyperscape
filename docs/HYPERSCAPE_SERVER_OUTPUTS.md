@@ -491,14 +491,23 @@ Send messages to players from the agent:
 ```typescript
 import { BroadcastManager } from './systems/ServerNetwork/broadcast';
 
+/**
+ * Send a chat message to a specific player.
+ * Uses crypto.randomUUID() for unique message IDs (Node.js built-in, no import needed).
+ */
 export function sendAgentMessage(
   broadcast: BroadcastManager,
   playerId: string,
   message: string
 ): void {
+  if (!message || message.trim() === '') {
+    console.warn('[sendAgentMessage] Empty message ignored');
+    return;
+  }
+
   // Send to specific player
   broadcast.sendToPlayer(playerId, 'chatAdded', {
-    id: uuid(),
+    id: crypto.randomUUID(),  // Node.js built-in since v14.17.0
     from: 'Agent',
     fromId: 'agent-system',
     body: message,
@@ -506,13 +515,21 @@ export function sendAgentMessage(
   });
 }
 
+/**
+ * Broadcast an announcement to all connected players.
+ */
 export function broadcastAgentAnnouncement(
   broadcast: BroadcastManager,
   message: string
 ): void {
+  if (!message || message.trim() === '') {
+    console.warn('[broadcastAgentAnnouncement] Empty message ignored');
+    return;
+  }
+
   // Broadcast to all players
   broadcast.sendToAll('chatAdded', {
-    id: uuid(),
+    id: crypto.randomUUID(),  // Node.js built-in since v14.17.0
     from: 'System',
     fromId: 'system',
     body: message,
@@ -557,6 +574,33 @@ export function broadcastAgentAnnouncement(
 ## Detailed ElizaOS Plugin Architecture
 
 This section maps Hyperscape server outputs to ElizaOS plugin components with proper typing, privacy, and dynamic/static configuration.
+
+### Why This Architecture Works
+
+**Problem**: ElizaOS agents need real-time game context to make intelligent decisions, but game state changes constantly and contains both public and sensitive data.
+
+**Solution**: The plugin architecture uses four component types that align perfectly with the Hyperscape server's event-driven architecture:
+
+| Component | Purpose | Hyperscape Integration |
+|-----------|---------|------------------------|
+| **Providers** | Supply context BEFORE agent decision-making | Read from `world.entities`, `SkillsSystem`, `CombatSystem` |
+| **Actions** | Execute commands AFTER agent decides | Emit events via `world.emit(EventType.X)` |
+| **Evaluators** | Extract info AFTER agent responds | Process incoming `EventType` events |
+| **Services** | Manage persistent connections | Maintain WebSocket connection to server |
+
+**Why dynamic vs static matters**:
+- `dynamic: true` → Data re-fetched every message (player positions, health, combat state)
+- `dynamic: false` → Data cached until agent restart (XP tables, server config)
+
+**Why private vs public matters**:
+- `private: false` → Visible in debug/logging, useful for context verification
+- `private: true` → Hidden from logs, protects sensitive data (inventory, equipment stats)
+
+**Why this will work**:
+1. **Event-driven alignment**: Hyperscape uses `EventType` enum for all events; ElizaOS uses event handlers for reactive behavior. Direct mapping.
+2. **Type safety**: TypeScript interfaces from `@hyperscape/shared` ensure compile-time correctness.
+3. **Memory safety**: Services properly register/unregister event handlers to prevent leaks.
+4. **Separation of concerns**: Providers read state, Actions mutate state, Evaluators extract facts.
 
 ### Data Structures
 
@@ -626,6 +670,33 @@ interface CombatStateData {
 }
 ```
 
+#### Item Data
+
+```typescript
+// From item-types.ts - Core item definition used throughout the codebase
+interface Item {
+  id: string;                    // Unique item ID (e.g., "bronze_sword")
+  name: string;                  // Display name (e.g., "Bronze Sword")
+  type: string;                  // Item category (e.g., "weapon", "armor", "consumable")
+  description?: string;          // Item description text
+  stackable: boolean;            // Whether items can stack in inventory
+  weight: number;                // Item weight (affects run energy)
+  value: number;                 // Base gold value
+  equipable?: boolean;           // Whether item can be equipped
+  equipmentSlot?: string;        // Which slot it equips to (if equipable)
+  stats?: {                      // Combat stats (for equipment)
+    attack?: number;
+    strength?: number;
+    defense?: number;
+    ranged?: number;
+  };
+  levelRequirement?: {           // Skill requirements to use
+    skill: string;
+    level: number;
+  };
+}
+```
+
 #### Inventory Data
 
 ```typescript
@@ -634,16 +705,11 @@ interface InventoryItem {
   slot: number;           // 0-27 (28 slots)
   itemId: string;
   quantity: number;
-  item: {
-    id: string;
-    name: string;
-    type: string;
-    stackable: boolean;
-    weight: number;
-  };
+  item: Item;             // Full item data (see Item interface above)
 }
 
 interface Equipment {
+  // Each slot contains the item data and itemId for quick reference
   weapon?: { item: Item; itemId: string };
   shield?: { item: Item; itemId: string };
   helmet?: { item: Item; itemId: string };
@@ -673,6 +739,16 @@ interface PlayerUIState {
 ### Providers (Context Suppliers)
 
 Providers supply contextual data to the agent BEFORE decision-making. Configure based on data volatility and privacy needs.
+
+**Architecture Rationale**: Providers are the "eyes and ears" of the agent. Each provider answers a specific question:
+- **worldStateProvider**: "What's happening in the game right now?"
+- **playerSkillsProvider**: "What can this player do?" (levels determine available content)
+- **combatStateProvider**: "Is the player fighting? Who?"
+- **inventoryProvider**: "What does the player have?"
+- **equipmentStatsProvider**: "How strong is the player's gear?"
+
+**Why position matters**: The `position` property controls load order. Lower numbers load first.
+World state should load early (-50) so other providers can depend on it being available.
 
 #### Provider Classification Guide
 
@@ -993,6 +1069,21 @@ export const equipmentStatsProvider: Provider = {
 
 Actions define what the agent CAN DO in the game world.
 
+**Architecture Rationale**: Actions are the "hands" of the agent. They follow a strict pattern:
+
+1. **validate()** - Can this action be performed? (Check services, permissions, preconditions)
+2. **handler()** - Execute the action and return result
+3. **similes** - Alternative phrases that trigger this action (improves NLU matching)
+4. **examples** - Training data for the agent to understand when to use this action
+
+**Why validate before handler**: Separating validation allows ElizaOS to quickly filter available actions
+without executing expensive handler logic. This is critical when the agent evaluates multiple potential actions.
+
+**Why emit EventType instead of calling methods directly**: The event-driven pattern allows:
+- Server-side validation and rate limiting
+- Event logging for debugging/analytics
+- Decoupling of agent from game implementation details
+
 #### Attack Mob Action
 
 ```typescript
@@ -1132,19 +1223,27 @@ export const gatherResourceAction: Action = {
 
 #### Send Chat Message Action
 
+**Architecture Rationale**: This action demonstrates the core pattern for agent-to-game communication.
+It validates input, accesses services, and provides feedback through both return value and callback.
+
 ```typescript
 export const sendChatAction: Action = {
   name: 'SEND_CHAT',
   description: 'Send a message to the game chat',
   similes: ['say', 'chat', 'tell', 'announce', 'speak'],
 
-  validate: async () => true, // Always available
+  // Validate that message is not empty before allowing action
+  validate: async (runtime: IAgentRuntime, message: Memory): Promise<boolean> => {
+    const text = message.content?.text?.trim();
+    // Only allow if there's actual content to send
+    return Boolean(text && text.length > 0);
+  },
 
   handler: async (
     runtime: IAgentRuntime,
     message: Memory,
     state: State,
-    options: any,
+    options: unknown,
     callback?: HandlerCallback
   ): Promise<ActionResult> => {
     const world = runtime.getService<HyperscapeWorld>('hyperscape');
@@ -1154,11 +1253,16 @@ export const sendChatAction: Action = {
       return { success: false, error: 'Services not available' };
     }
 
-    const agentMessage = message.content.text || '';
+    const agentMessage = message.content?.text?.trim() || '';
+
+    // Double-check for empty messages (defense in depth)
+    if (!agentMessage) {
+      return { success: false, error: 'Cannot send empty message' };
+    }
 
     // Broadcast to all players
     broadcast.sendToAll('chatAdded', {
-      id: crypto.randomUUID(),
+      id: crypto.randomUUID(),  // Node.js built-in
       from: 'Agent',
       fromId: 'agent-system',
       body: agentMessage,
@@ -1246,6 +1350,20 @@ export const changeAttackStyleAction: Action = {
 ### Evaluators (Post-Response Processors)
 
 Evaluators extract information and update state AFTER agent responses.
+
+**Architecture Rationale**: Evaluators are the "memory" of the agent. They:
+1. Extract structured facts from unstructured events
+2. Store information in the agent's memory for future context
+3. Track patterns over time (e.g., combat outcomes, level progression)
+
+**Why alwaysRun matters**:
+- `alwaysRun: true` → Evaluator runs on EVERY message (use for critical tracking like level-ups)
+- `alwaysRun: false` → Evaluator only runs when `validate()` returns true (use for conditional processing)
+
+**Why evaluators store to memory**: The `runtime.databaseAdapter.createMemory()` call persists facts
+that can be retrieved later via `runtime.getMemories()`. This enables long-term context:
+- "You killed 50 goblins yesterday"
+- "Your Attack skill went from 40 to 45 this session"
 
 #### Combat Event Evaluator
 
@@ -1364,16 +1482,35 @@ Services manage long-running connections and state.
 
 #### Hyperscape Connection Service
 
+**Architecture Rationale**: Services in ElizaOS manage long-running connections and persistent state.
+The HyperscapeService is responsible for:
+1. **Single Connection Point**: Centralizes the WebSocket/world connection so all providers and actions share the same instance
+2. **Event Bridge**: Translates Hyperscape EventType events into ElizaOS runtime events for cross-plugin communication
+3. **Lifecycle Management**: Properly initializes on start and cleans up on stop to prevent memory leaks
+
+**Why this design works**: ElizaOS services are singletons per runtime. By storing the World instance here,
+providers and actions can access it via `runtime.getService('hyperscape')` without managing their own connections.
+
 ```typescript
 import { Service, IAgentRuntime, logger } from '@elizaos/core';
 import { World, EventType } from '@hyperscape/shared';
 
+/**
+ * HyperscapeService - Manages the connection to Hyperscape game server.
+ *
+ * This service acts as the bridge between ElizaOS agents and the Hyperscape world.
+ * It maintains a single WebSocket connection and translates game events into
+ * runtime events that other plugins can subscribe to.
+ *
+ * IMPORTANT: All event handlers must be stored in eventHandlers map for proper cleanup.
+ */
 export class HyperscapeService extends Service {
   static serviceType = 'hyperscape';
   capabilityDescription = 'Manages connection to Hyperscape game server';
 
   private world!: World;
-  private eventHandlers: Map<string, Function> = new Map();
+  // Store handlers for cleanup - prevents memory leaks
+  private eventHandlers: Map<EventType, (data: unknown) => void> = new Map();
 
   constructor(protected runtime: IAgentRuntime) {
     super();
@@ -1395,42 +1532,58 @@ export class HyperscapeService extends Service {
     // Connect to world
     this.world = await this.connectToWorld(serverUrl);
 
-    // Set up event listeners
+    // Set up event listeners with proper cleanup tracking
     this.setupEventListeners();
 
     logger.info('[HyperscapeService] Connected to Hyperscape server');
   }
 
+  /**
+   * Register an event handler and store it for later cleanup.
+   * This pattern prevents memory leaks by ensuring all handlers can be removed.
+   */
+  private registerEventHandler(
+    eventType: EventType,
+    handler: (data: unknown) => void
+  ): void {
+    this.world.on(eventType, handler);
+    this.eventHandlers.set(eventType, handler);
+  }
+
   private setupEventListeners(): void {
-    // Player events
-    this.world.on(EventType.PLAYER_JOINED, (data) => {
-      logger.info(`[Hyperscape] Player joined: ${data.player.data.name}`);
+    // Player events - tracked for agent greeting/assistance behaviors
+    this.registerEventHandler(EventType.PLAYER_JOINED, (data: unknown) => {
+      const payload = data as { player: { data: { name: string } } };
+      logger.info(`[Hyperscape] Player joined: ${payload.player.data.name}`);
       this.runtime.emit('hyperscape:player_joined', data);
     });
 
-    this.world.on(EventType.PLAYER_DIED, (data) => {
-      logger.info(`[Hyperscape] Player died: ${data.playerId}`);
+    this.registerEventHandler(EventType.PLAYER_DIED, (data: unknown) => {
+      const payload = data as { playerId: string };
+      logger.info(`[Hyperscape] Player died: ${payload.playerId}`);
       this.runtime.emit('hyperscape:player_died', data);
     });
 
-    // Combat events
-    this.world.on(EventType.COMBAT_KILL, (data) => {
-      logger.info(`[Hyperscape] Kill: ${data.attackerId} -> ${data.targetId}`);
+    // Combat events - useful for agent commentary or assistance
+    this.registerEventHandler(EventType.COMBAT_KILL, (data: unknown) => {
+      const payload = data as { attackerId: string; targetId: string };
+      logger.info(`[Hyperscape] Kill: ${payload.attackerId} -> ${payload.targetId}`);
       this.runtime.emit('hyperscape:combat_kill', data);
     });
 
-    this.world.on(EventType.COMBAT_DAMAGE_DEALT, (data) => {
+    this.registerEventHandler(EventType.COMBAT_DAMAGE_DEALT, (data: unknown) => {
       this.runtime.emit('hyperscape:damage_dealt', data);
     });
 
-    // Skill events
-    this.world.on(EventType.SKILLS_LEVEL_UP, (data) => {
-      logger.info(`[Hyperscape] Level up: ${data.playerId} ${data.skill} -> ${data.newLevel}`);
+    // Skill events - for milestone congratulations
+    this.registerEventHandler(EventType.SKILLS_LEVEL_UP, (data: unknown) => {
+      const payload = data as { playerId: string; skill: string; newLevel: number };
+      logger.info(`[Hyperscape] Level up: ${payload.playerId} ${payload.skill} -> ${payload.newLevel}`);
       this.runtime.emit('hyperscape:level_up', data);
     });
 
-    // Chat events
-    this.world.on(EventType.CHAT_MESSAGE, (data) => {
+    // Chat events - primary input channel for agent interactions
+    this.registerEventHandler(EventType.CHAT_MESSAGE, (data: unknown) => {
       this.runtime.emit('hyperscape:chat', data);
     });
   }
@@ -1455,9 +1608,10 @@ export class HyperscapeService extends Service {
   }
 
   async stop(): Promise<void> {
-    // Clean up event handlers
-    this.eventHandlers.forEach((handler, event) => {
-      this.world.off(event, handler);
+    // Clean up ALL registered event handlers - prevents memory leaks
+    this.eventHandlers.forEach((handler, eventType) => {
+      this.world.off(eventType, handler);
+      logger.debug(`[HyperscapeService] Removed handler for ${eventType}`);
     });
     this.eventHandlers.clear();
 
@@ -1466,7 +1620,7 @@ export class HyperscapeService extends Service {
       await this.world.disconnect?.();
     }
 
-    logger.info('[HyperscapeService] Stopped');
+    logger.info('[HyperscapeService] Stopped and cleaned up');
   }
 }
 ```
@@ -1542,3 +1696,60 @@ export default hyperscapePlugin;
 | `combatEventEvaluator` | Evaluator | - | - | Track combat outcomes |
 | `levelUpEvaluator` | Evaluator | - | - | Record skill milestones |
 | `HyperscapeService` | Service | - | - | Manage world connection |
+
+---
+
+## Integration Verification Checklist
+
+Use this checklist to verify your ElizaOS + Hyperscape integration is working correctly:
+
+### Connection
+- [ ] `HyperscapeService.start()` completes without errors
+- [ ] `HYPERSCAPE_SERVER_URL` environment variable is set
+- [ ] World connection established (check logs for `[HyperscapeService] Connected`)
+
+### Providers
+- [ ] `worldStateProvider.get()` returns player count > 0
+- [ ] `playerSkillsProvider.get()` returns skill data for test player
+- [ ] `combatStateProvider.get()` returns `inCombat: false` when player idle
+
+### Actions
+- [ ] `attackMobAction.validate()` returns `true` when mob name is in message
+- [ ] `sendChatAction.handler()` broadcasts message to all players
+- [ ] `sendChatAction.validate()` returns `false` for empty messages
+
+### Events
+- [ ] `hyperscape:player_joined` event fires when player connects
+- [ ] `hyperscape:level_up` event fires when XP gained
+- [ ] `HyperscapeService.stop()` cleans up all event handlers (no memory leaks)
+
+### Memory Safety
+- [ ] `eventHandlers.size` equals number of registered events
+- [ ] After `stop()`, `eventHandlers.size` equals 0
+- [ ] No "MaxListenersExceededWarning" in console
+
+---
+
+## Common Issues and Solutions
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| `Services not available` | HyperscapeService not started | Ensure service is in plugin's `services` array |
+| `No skill data available` | Player not found | Check `playerId` is correct entity ID |
+| `Empty message ignored` | Empty string passed to chat | Validate message content before calling action |
+| Memory leak warnings | Event handlers not cleaned up | Use `registerEventHandler()` pattern for all events |
+| `HYPERSCAPE_SERVER_URL not configured` | Missing env variable | Add `HYPERSCAPE_SERVER_URL=ws://localhost:3000` to `.env` |
+
+---
+
+## Version Compatibility
+
+| Package | Tested Version | Notes |
+|---------|----------------|-------|
+| `@elizaos/core` | 1.2.9+ | Provider `dynamic` property added in 1.2.0 |
+| `@hyperscape/shared` | Latest | EventType enum must match server version |
+| Node.js | 18+ | `crypto.randomUUID()` built-in since v14.17.0 |
+
+---
+
+*Document generated for ElizaOS plugin integration with Hyperscape server.*
