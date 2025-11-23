@@ -9,6 +9,9 @@
 3. [REST API Endpoints](#rest-api-endpoints)
 4. [Client Input Messages (Client → Server)](#client-input-messages-client--server)
 5. [ElizaOS Integration Patterns](#elizaos-integration-patterns)
+6. [Detailed ElizaOS Plugin Architecture](#detailed-elizaos-plugin-architecture)
+7. [Advanced ElizaOS Patterns](#advanced-elizaos-patterns)
+8. [Integration Verification Checklist](#integration-verification-checklist)
 
 ---
 
@@ -1696,6 +1699,792 @@ export default hyperscapePlugin;
 | `combatEventEvaluator` | Evaluator | - | - | Track combat outcomes |
 | `levelUpEvaluator` | Evaluator | - | - | Record skill milestones |
 | `HyperscapeService` | Service | - | - | Manage world connection |
+
+---
+
+## Advanced ElizaOS Patterns
+
+This section covers advanced patterns for production-ready Hyperscape agent integration.
+
+### 1. Character Configuration
+
+Every ElizaOS agent needs a character file that defines its personality, knowledge, and behavior. For Hyperscape agents, this includes game-specific context.
+
+```typescript
+// characters/hyperscape-guide.json
+{
+  "name": "Hyperscape Guide",
+  "description": "An in-game NPC guide that helps players navigate the world",
+  "modelProvider": "anthropic",
+  "clients": ["hyperscape"],  // Custom client for game connection
+
+  "bio": [
+    "A wise guide who has explored every corner of Hyperscape",
+    "Specializes in helping new players learn combat and skills",
+    "Has detailed knowledge of all items, mobs, and resources"
+  ],
+
+  "lore": [
+    "Was once a player who achieved level 99 in all skills",
+    "Now dedicates time to helping others on their journey",
+    "Known for giving accurate XP rates and training advice"
+  ],
+
+  "knowledge": [
+    "Combat styles: Aggressive trains Strength, Defensive trains Defense, Accurate trains Attack, Controlled trains all three equally",
+    "Skills cap at level 99 with 200M XP maximum",
+    "Combat level is calculated from Attack, Strength, Defense, Constitution, and Ranged",
+    "Inventory has 28 slots, equipment has 10 slots"
+  ],
+
+  "messageExamples": [
+    [
+      {"user": "player", "content": {"text": "How do I train strength?"}},
+      {"user": "Hyperscape Guide", "content": {"text": "Switch to Aggressive combat style! Every hit will give you Strength XP. Fight mobs around your combat level for best XP rates."}}
+    ],
+    [
+      {"user": "player", "content": {"text": "Where can I find goblins?"}},
+      {"user": "Hyperscape Guide", "content": {"text": "Goblins spawn in the forest area east of the starting zone. They're great for low-level combat training!"}}
+    ]
+  ],
+
+  "style": {
+    "all": ["Be helpful and encouraging", "Give specific, actionable advice", "Reference game mechanics accurately"],
+    "chat": ["Keep responses concise for in-game chat", "Use game terminology players understand"]
+  },
+
+  "settings": {
+    "secrets": {
+      "HYPERSCAPE_SERVER_URL": "ws://localhost:3000"
+    },
+    "voice": {
+      "model": "en_US-male-medium"
+    }
+  },
+
+  "plugins": ["@elizaos/plugin-hyperscape"]
+}
+```
+
+**Why character configuration matters**:
+- `bio` and `lore` provide context for the agent's personality
+- `knowledge` is embedded and searchable via RAG
+- `messageExamples` train the model on expected response patterns
+- `style` constrains output format to match game chat
+
+---
+
+### 2. Memory Patterns
+
+ElizaOS agents maintain memory across conversations. For game agents, this enables:
+- Remembering player preferences
+- Tracking long-term relationships
+- Recalling past events
+
+#### Memory Retrieval Provider
+
+```typescript
+import type { Provider, IAgentRuntime, Memory, ProviderResult } from '@elizaos/core';
+
+/**
+ * Retrieves relevant memories about the current player for context.
+ * This enables the agent to reference past interactions.
+ */
+export const playerMemoryProvider: Provider = {
+  name: 'HYPERSCAPE_PLAYER_MEMORY',
+  description: 'Past interactions and facts about the current player',
+  dynamic: true,
+  private: false,  // Useful to see in debug what memories are retrieved
+  position: -45,   // Load after world state but before combat
+
+  get: async (runtime: IAgentRuntime, message: Memory): Promise<ProviderResult> => {
+    const playerId = message.userId || message.entityId;
+    if (!playerId) {
+      return { text: '', data: {} };
+    }
+
+    // Retrieve recent memories about this player
+    const recentMemories = await runtime.messageManager.getMemories({
+      roomId: message.roomId,
+      count: 10,
+      unique: true,
+    });
+
+    // Retrieve facts stored by evaluators
+    const playerFacts = await runtime.databaseAdapter.searchMemoriesByEmbedding(
+      await runtime.embed(`player ${playerId} facts`),
+      {
+        tableName: 'memories',
+        roomId: message.roomId,
+        match_count: 5,
+        match_threshold: 0.7,
+      }
+    );
+
+    // Build context from memories
+    const recentTopics = recentMemories
+      .filter(m => m.content?.text)
+      .map(m => m.content.text)
+      .slice(0, 5);
+
+    const knownFacts = playerFacts
+      .filter(f => f.content?.data)
+      .map(f => f.content.data);
+
+    const text = `
+## Player History
+Recent conversation topics: ${recentTopics.join(', ') || 'None'}
+Known facts: ${knownFacts.length} stored facts about this player
+    `.trim();
+
+    return {
+      text,
+      data: {
+        recentMemories: recentMemories.length,
+        facts: knownFacts,
+        playerId,
+      },
+    };
+  },
+};
+```
+
+#### Memory Template for Combat Events
+
+```typescript
+/**
+ * Store combat events with structured data for later retrieval.
+ * Templates ensure consistent memory format across evaluators.
+ */
+interface CombatMemoryTemplate {
+  type: 'combat_event';
+  playerId: string;
+  action: 'kill' | 'death' | 'damage_dealt' | 'damage_taken';
+  target?: string;
+  damage?: number;
+  timestamp: number;
+  location?: { x: number; y: number; z: number };
+}
+
+export async function storeCombatMemory(
+  runtime: IAgentRuntime,
+  roomId: string,
+  data: CombatMemoryTemplate
+): Promise<void> {
+  await runtime.databaseAdapter.createMemory({
+    id: crypto.randomUUID(),
+    entityId: data.playerId,
+    agentId: runtime.agentId,
+    roomId,
+    content: {
+      text: `Combat: ${data.action} ${data.target || ''} for ${data.damage || 0} damage`,
+      data,
+    },
+    type: 'combat_event',
+    createdAt: data.timestamp,
+  });
+}
+```
+
+---
+
+### 3. Knowledge/RAG Integration
+
+Static game knowledge (items, mobs, locations) should be embedded and searchable.
+
+#### Item Database Knowledge
+
+```typescript
+// knowledge/items.ts
+export const ITEM_KNOWLEDGE = [
+  {
+    id: 'bronze_sword',
+    text: 'Bronze Sword: A basic melee weapon requiring level 1 Attack. Stats: +4 attack bonus, +3 strength bonus. Good starter weapon for new players.',
+    metadata: { type: 'weapon', level: 1, slot: 'weapon' }
+  },
+  {
+    id: 'iron_sword',
+    text: 'Iron Sword: Requires level 10 Attack. Stats: +10 attack bonus, +7 strength bonus. Significant upgrade from bronze.',
+    metadata: { type: 'weapon', level: 10, slot: 'weapon' }
+  },
+  // ... more items
+];
+
+// Load into agent's knowledge base on startup
+export async function loadItemKnowledge(runtime: IAgentRuntime): Promise<void> {
+  for (const item of ITEM_KNOWLEDGE) {
+    await runtime.knowledgeManager.createKnowledge({
+      id: `item_${item.id}`,
+      content: { text: item.text },
+      metadata: item.metadata,
+    });
+  }
+}
+```
+
+#### Knowledge-Aware Provider
+
+```typescript
+/**
+ * Searches game knowledge based on the current conversation.
+ * Returns relevant item/mob/location info for agent context.
+ */
+export const gameKnowledgeProvider: Provider = {
+  name: 'HYPERSCAPE_GAME_KNOWLEDGE',
+  description: 'Relevant game knowledge based on conversation',
+  dynamic: true,
+  private: false,
+  position: 10,  // Load late, after player context is established
+
+  get: async (runtime: IAgentRuntime, message: Memory): Promise<ProviderResult> => {
+    const query = message.content?.text || '';
+    if (!query || query.length < 3) {
+      return { text: '', data: {} };
+    }
+
+    // Search embedded knowledge
+    const results = await runtime.knowledgeManager.searchKnowledge(query, {
+      limit: 3,
+      threshold: 0.6,
+    });
+
+    if (results.length === 0) {
+      return { text: '', data: { matches: [] } };
+    }
+
+    const text = `
+## Relevant Game Knowledge
+${results.map(r => `- ${r.content.text}`).join('\n')}
+    `.trim();
+
+    return {
+      text,
+      data: { matches: results },
+    };
+  },
+};
+```
+
+---
+
+### 4. Event-Driven Response Flow
+
+The key to reactive game agents is translating game events into agent responses.
+
+#### Event-to-Message Bridge
+
+```typescript
+import { IAgentRuntime, Memory, Content } from '@elizaos/core';
+
+/**
+ * Converts Hyperscape events into ElizaOS messages that trigger agent responses.
+ * This is the core bridge between game events and agent behavior.
+ */
+export class EventToMessageBridge {
+  constructor(
+    private runtime: IAgentRuntime,
+    private world: World,
+    private roomId: string  // The "room" representing game chat
+  ) {}
+
+  /**
+   * Initialize event listeners that create messages from game events.
+   */
+  setup(): void {
+    // Player death -> Agent offers help
+    this.world.on(EventType.PLAYER_DIED, async (data: { playerId: string }) => {
+      const player = this.world.entities.players.get(data.playerId);
+      if (!player) return;
+
+      // Create a synthetic message that triggers agent response
+      const deathMessage: Memory = {
+        id: crypto.randomUUID(),
+        entityId: data.playerId,
+        agentId: this.runtime.agentId,
+        roomId: this.roomId,
+        content: {
+          text: `[SYSTEM] Player ${player.data.name} has died`,
+          source: 'hyperscape_event',
+          eventType: 'PLAYER_DIED',
+          data,
+        },
+        createdAt: Date.now(),
+      };
+
+      // Process through agent - this triggers providers, actions, evaluators
+      await this.runtime.processMessage(deathMessage);
+    });
+
+    // Level up -> Agent congratulates
+    this.world.on(EventType.SKILLS_LEVEL_UP, async (data: { playerId: string; skill: string; newLevel: number }) => {
+      const player = this.world.entities.players.get(data.playerId);
+      if (!player) return;
+
+      const levelUpMessage: Memory = {
+        id: crypto.randomUUID(),
+        entityId: data.playerId,
+        agentId: this.runtime.agentId,
+        roomId: this.roomId,
+        content: {
+          text: `[SYSTEM] ${player.data.name} reached level ${data.newLevel} ${data.skill}!`,
+          source: 'hyperscape_event',
+          eventType: 'SKILLS_LEVEL_UP',
+          data,
+        },
+        createdAt: Date.now(),
+      };
+
+      await this.runtime.processMessage(levelUpMessage);
+    });
+
+    // Chat message -> Agent may respond
+    this.world.on(EventType.CHAT_MESSAGE, async (data: { from: string; fromId: string; body: string }) => {
+      // Don't respond to own messages
+      if (data.fromId === 'agent-system') return;
+
+      const chatMessage: Memory = {
+        id: crypto.randomUUID(),
+        entityId: data.fromId,
+        agentId: this.runtime.agentId,
+        roomId: this.roomId,
+        content: {
+          text: data.body,
+          source: 'hyperscape_chat',
+          from: data.from,
+        },
+        createdAt: Date.now(),
+      };
+
+      await this.runtime.processMessage(chatMessage);
+    });
+  }
+}
+```
+
+#### Response Handler with Callback
+
+```typescript
+/**
+ * Custom message handler that routes agent responses to game chat.
+ */
+export function createHyperscapeMessageHandler(
+  broadcast: BroadcastManager
+): HandlerCallback {
+  return async (response: Content, attachments: Media[]): Promise<Memory[]> => {
+    const text = response.text?.trim();
+    if (!text) return [];
+
+    // Send to game chat
+    broadcast.sendToAll('chatAdded', {
+      id: crypto.randomUUID(),
+      from: 'Guide',
+      fromId: 'agent-system',
+      body: text,
+      createdAt: new Date().toISOString(),
+    });
+
+    // Return as memory for storage
+    return [{
+      id: crypto.randomUUID(),
+      content: response,
+      createdAt: Date.now(),
+    } as Memory];
+  };
+}
+```
+
+---
+
+### 5. State Composition
+
+ElizaOS State flows through the entire processing pipeline. Compose state efficiently.
+
+```typescript
+import { State, IAgentRuntime, Memory } from '@elizaos/core';
+
+/**
+ * Compose full game state for agent context.
+ * This is called before the agent generates a response.
+ */
+export async function composeHyperscapeState(
+  runtime: IAgentRuntime,
+  message: Memory,
+  existingState?: State
+): Promise<State> {
+  // Start with existing state or empty
+  const state: State = existingState || {};
+
+  // Get all provider data
+  const worldState = await runtime.getProvider('HYPERSCAPE_WORLD_STATE')?.get(runtime, message);
+  const playerSkills = await runtime.getProvider('HYPERSCAPE_PLAYER_SKILLS')?.get(runtime, message);
+  const combatState = await runtime.getProvider('HYPERSCAPE_COMBAT_STATE')?.get(runtime, message);
+  const playerMemory = await runtime.getProvider('HYPERSCAPE_PLAYER_MEMORY')?.get(runtime, message);
+  const gameKnowledge = await runtime.getProvider('HYPERSCAPE_GAME_KNOWLEDGE')?.get(runtime, message);
+
+  // Compose into state
+  return {
+    ...state,
+
+    // Core ElizaOS state
+    agentId: runtime.agentId,
+    roomId: message.roomId,
+    userId: message.entityId,
+
+    // Hyperscape-specific state
+    hyperscape: {
+      world: worldState?.data,
+      skills: playerSkills?.data,
+      combat: combatState?.data,
+      memory: playerMemory?.data,
+      knowledge: gameKnowledge?.data,
+    },
+
+    // Formatted context for LLM
+    formattedContext: [
+      worldState?.text,
+      playerSkills?.text,
+      combatState?.text,
+      playerMemory?.text,
+      gameKnowledge?.text,
+    ].filter(Boolean).join('\n\n'),
+  };
+}
+```
+
+---
+
+### 6. Advanced Patterns
+
+#### Provider Caching
+
+Expensive provider calls should be cached to prevent repeated computation.
+
+```typescript
+import { Provider, IAgentRuntime, Memory, ProviderResult } from '@elizaos/core';
+
+/**
+ * Caching wrapper for expensive providers.
+ * Cache invalidates based on TTL or explicit invalidation.
+ */
+class CachedProvider implements Provider {
+  private cache: Map<string, { data: ProviderResult; timestamp: number }> = new Map();
+
+  constructor(
+    private wrapped: Provider,
+    private ttlMs: number = 5000  // 5 second default
+  ) {}
+
+  get name() { return this.wrapped.name; }
+  get description() { return this.wrapped.description; }
+  get dynamic() { return this.wrapped.dynamic; }
+  get private() { return this.wrapped.private; }
+  get position() { return this.wrapped.position; }
+
+  async get(runtime: IAgentRuntime, message: Memory): Promise<ProviderResult> {
+    const cacheKey = `${message.roomId}:${message.entityId}`;
+    const cached = this.cache.get(cacheKey);
+
+    if (cached && Date.now() - cached.timestamp < this.ttlMs) {
+      return cached.data;
+    }
+
+    const result = await this.wrapped.get(runtime, message);
+    this.cache.set(cacheKey, { data: result, timestamp: Date.now() });
+
+    return result;
+  }
+
+  invalidate(roomId?: string, entityId?: string): void {
+    if (!roomId && !entityId) {
+      this.cache.clear();
+    } else {
+      const prefix = `${roomId || ''}:${entityId || ''}`;
+      for (const key of this.cache.keys()) {
+        if (key.startsWith(prefix)) {
+          this.cache.delete(key);
+        }
+      }
+    }
+  }
+}
+
+// Usage
+export const cachedWorldStateProvider = new CachedProvider(worldStateProvider, 2000);
+```
+
+#### Rate Limiting
+
+Prevent agent spam in game chat.
+
+```typescript
+/**
+ * Rate limiter for agent actions.
+ * Prevents spam and ensures reasonable response frequency.
+ */
+class ActionRateLimiter {
+  private lastAction: Map<string, number> = new Map();
+
+  constructor(
+    private minIntervalMs: number = 3000  // 3 seconds between messages
+  ) {}
+
+  canAct(actionKey: string): boolean {
+    const lastTime = this.lastAction.get(actionKey) || 0;
+    return Date.now() - lastTime >= this.minIntervalMs;
+  }
+
+  recordAction(actionKey: string): void {
+    this.lastAction.set(actionKey, Date.now());
+  }
+
+  getRemainingCooldown(actionKey: string): number {
+    const lastTime = this.lastAction.get(actionKey) || 0;
+    const remaining = this.minIntervalMs - (Date.now() - lastTime);
+    return Math.max(0, remaining);
+  }
+}
+
+// Usage in action
+export const rateLimitedChatAction: Action = {
+  name: 'SEND_CHAT_RATE_LIMITED',
+  description: 'Send chat message with rate limiting',
+
+  validate: async (runtime, message) => {
+    const limiter = runtime.getService<ActionRateLimiter>('rate-limiter');
+    return limiter?.canAct('chat') ?? true;
+  },
+
+  handler: async (runtime, message) => {
+    const limiter = runtime.getService<ActionRateLimiter>('rate-limiter');
+
+    if (!limiter?.canAct('chat')) {
+      const remaining = limiter?.getRemainingCooldown('chat') || 0;
+      return {
+        success: false,
+        error: `Rate limited. Try again in ${Math.ceil(remaining/1000)}s`
+      };
+    }
+
+    // ... send message logic ...
+
+    limiter?.recordAction('chat');
+    return { success: true };
+  },
+};
+```
+
+#### Multi-Agent Coordination
+
+When multiple agents operate in the same game world.
+
+```typescript
+/**
+ * Coordination service for multi-agent scenarios.
+ * Prevents agents from responding to the same event simultaneously.
+ */
+export class AgentCoordinationService extends Service {
+  static serviceType = 'agent-coordination';
+
+  private claimedEvents: Map<string, string> = new Map();  // eventId -> agentId
+  private cleanupInterval: NodeJS.Timeout | null = null;
+
+  static async start(runtime: IAgentRuntime): Promise<AgentCoordinationService> {
+    const service = new AgentCoordinationService(runtime);
+    service.startCleanup();
+    return service;
+  }
+
+  /**
+   * Attempt to claim exclusive handling of an event.
+   * Returns true if this agent should handle it.
+   */
+  claimEvent(eventId: string, agentId: string): boolean {
+    if (this.claimedEvents.has(eventId)) {
+      return this.claimedEvents.get(eventId) === agentId;
+    }
+    this.claimedEvents.set(eventId, agentId);
+    return true;
+  }
+
+  releaseEvent(eventId: string): void {
+    this.claimedEvents.delete(eventId);
+  }
+
+  private startCleanup(): void {
+    // Clean up old claims every 30 seconds
+    this.cleanupInterval = setInterval(() => {
+      // Events older than 5 minutes are released
+      // In production, store timestamps with claims
+      if (this.claimedEvents.size > 1000) {
+        this.claimedEvents.clear();
+      }
+    }, 30000);
+  }
+
+  async stop(): Promise<void> {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+    }
+    this.claimedEvents.clear();
+  }
+}
+```
+
+#### Error Recovery and Reconnection
+
+```typescript
+/**
+ * Robust connection management with automatic reconnection.
+ */
+export class ResilientHyperscapeService extends Service {
+  static serviceType = 'hyperscape';
+
+  private world: World | null = null;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private reconnectDelayMs = 2000;
+  private isConnecting = false;
+
+  async connect(): Promise<void> {
+    if (this.isConnecting) return;
+    this.isConnecting = true;
+
+    try {
+      const serverUrl = this.runtime.getSetting('HYPERSCAPE_SERVER_URL');
+      this.world = await this.connectToWorld(serverUrl);
+      this.reconnectAttempts = 0;
+      this.setupEventListeners();
+      this.setupDisconnectHandler();
+      logger.info('[HyperscapeService] Connected successfully');
+    } catch (error) {
+      logger.error('[HyperscapeService] Connection failed:', error);
+      await this.handleReconnect();
+    } finally {
+      this.isConnecting = false;
+    }
+  }
+
+  private setupDisconnectHandler(): void {
+    this.world?.on('disconnect', async () => {
+      logger.warn('[HyperscapeService] Disconnected from server');
+      this.world = null;
+      await this.handleReconnect();
+    });
+  }
+
+  private async handleReconnect(): Promise<void> {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      logger.error('[HyperscapeService] Max reconnect attempts reached');
+      this.runtime.emit('hyperscape:connection_failed');
+      return;
+    }
+
+    this.reconnectAttempts++;
+    const delay = this.reconnectDelayMs * Math.pow(2, this.reconnectAttempts - 1);
+
+    logger.info(`[HyperscapeService] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+
+    await new Promise(resolve => setTimeout(resolve, delay));
+    await this.connect();
+  }
+
+  getWorld(): World | null {
+    return this.world;
+  }
+
+  isConnected(): boolean {
+    return this.world !== null;
+  }
+}
+```
+
+---
+
+### 7. Testing Patterns
+
+#### Unit Testing Providers
+
+```typescript
+import { describe, it, expect, vi } from 'vitest';
+
+describe('worldStateProvider', () => {
+  it('returns player data when world has players', async () => {
+    // Mock runtime
+    const mockRuntime = {
+      getService: vi.fn().mockReturnValue({
+        entities: {
+          items: new Map([
+            ['player1', { type: 'player', data: { name: 'TestPlayer' }, position: { x: 0, y: 0, z: 0 } }]
+          ])
+        },
+        time: 12345,
+      }),
+    };
+
+    const mockMessage = {
+      userId: 'player1',
+      roomId: 'test-room',
+    };
+
+    const result = await worldStateProvider.get(mockRuntime as any, mockMessage as any);
+
+    expect(result.data.connected).toBe(true);
+    expect(result.data.playerCount).toBe(1);
+    expect(result.data.players[0].name).toBe('TestPlayer');
+  });
+
+  it('returns disconnected state when world not available', async () => {
+    const mockRuntime = {
+      getService: vi.fn().mockReturnValue(null),
+    };
+
+    const result = await worldStateProvider.get(mockRuntime as any, {} as any);
+
+    expect(result.data.connected).toBe(false);
+  });
+});
+```
+
+#### Integration Testing with Mock World
+
+```typescript
+import { describe, it, expect, beforeEach } from 'vitest';
+
+describe('HyperscapeService Integration', () => {
+  let service: HyperscapeService;
+  let mockWorld: MockWorld;
+
+  beforeEach(async () => {
+    mockWorld = new MockWorld();
+    service = await HyperscapeService.start(createMockRuntime({
+      HYPERSCAPE_SERVER_URL: 'ws://mock',
+    }));
+  });
+
+  it('emits player_joined event when player connects', async () => {
+    const joinedPromise = new Promise(resolve => {
+      service.runtime.on('hyperscape:player_joined', resolve);
+    });
+
+    mockWorld.emit(EventType.PLAYER_JOINED, {
+      playerId: 'test-player',
+      player: { data: { name: 'TestPlayer' } },
+    });
+
+    const event = await joinedPromise;
+    expect(event.playerId).toBe('test-player');
+  });
+
+  it('cleans up all handlers on stop', async () => {
+    const initialHandlerCount = service.eventHandlers.size;
+    expect(initialHandlerCount).toBeGreaterThan(0);
+
+    await service.stop();
+
+    expect(service.eventHandlers.size).toBe(0);
+  });
+});
+```
 
 ---
 
