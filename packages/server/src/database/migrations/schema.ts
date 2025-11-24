@@ -105,9 +105,12 @@ export const worldChunks = pgTable(
   ],
 );
 
+// Post-migration 0008: id IS the wallet address (Ethereum or Solana)
+// No separate wallet column - wallet column removed
 export const characters = pgTable(
   "characters",
   {
+    // id is now the wallet address (Ethereum or Solana)
     id: text().primaryKey().notNull(),
     accountId: text().notNull(),
     name: text().notNull(),
@@ -143,8 +146,9 @@ export const characters = pgTable(
     // You can use { mode: "bigint" } if numbers are exceeding js number limitations
     lastLogin: bigint({ mode: "number" }).default(0),
     avatar: text(),
-    wallet: text(),
+    // wallet column removed - id IS the wallet (post-migration 0008)
     isAgent: integer().default(0).notNull(),
+    attackStyle: text().default("accurate"),
   },
   (table) => [
     index("idx_characters_account").using(
@@ -155,10 +159,7 @@ export const characters = pgTable(
       "btree",
       table.isAgent.asc().nullsLast().op("int4_ops"),
     ),
-    index("idx_characters_wallet").using(
-      "btree",
-      table.wallet.asc().nullsLast().op("text_ops"),
-    ),
+    // idx_characters_wallet removed - no longer needed (post-migration 0008)
   ],
 );
 
