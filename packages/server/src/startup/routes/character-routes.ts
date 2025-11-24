@@ -123,12 +123,15 @@ export function registerCharacterRoutes(
    * Create a character in the Hyperscape database.
    * This endpoint is separate from the file-saving endpoint above.
    *
+   * **IMPORTANT**: Wallet address is REQUIRED and IS the character ID.
+   * The client must derive the wallet from Privy BEFORE calling this endpoint.
+   *
    * Request body:
    * {
    *   accountId: string,
+   *   wallet: string,    // REQUIRED - this IS the character ID
    *   name: string,
    *   avatar?: string,
-   *   wallet?: string,
    *   isAgent?: boolean
    * }
    *
@@ -142,9 +145,9 @@ export function registerCharacterRoutes(
     try {
       const body = request.body as {
         accountId: string;
+        wallet: string; // REQUIRED - this IS the character ID
         name: string;
         avatar?: string;
-        wallet?: string;
         isAgent?: boolean;
       };
 
@@ -152,6 +155,15 @@ export function registerCharacterRoutes(
         return reply.status(400).send({
           success: false,
           error: "Missing required fields: accountId, name",
+        });
+      }
+
+      // CRITICAL: Wallet is REQUIRED - it IS the character ID
+      if (!body.wallet || body.wallet.trim() === "") {
+        return reply.status(400).send({
+          success: false,
+          error:
+            "Missing required field: wallet (wallet address is required for character creation)",
         });
       }
 
@@ -171,32 +183,30 @@ export function registerCharacterRoutes(
         });
       }
 
-      // Generate UUID for character ID
-      const characterId = crypto.randomUUID();
+      // Character ID IS the wallet address (post-migration 0008)
+      const characterId = body.wallet;
 
       console.log("[CharacterRoutes] Creating character in database:", {
-        id: characterId,
+        id: characterId, // wallet IS the ID
         accountId: body.accountId,
         name: body.name,
         avatar: body.avatar,
-        wallet: body.wallet,
         isAgent: body.isAgent,
       });
 
-      // Create character in database
+      // Create character in database - wallet IS the character ID
       const created = await databaseSystem.createCharacter(
         body.accountId,
-        characterId,
+        body.wallet, // Wallet IS the character ID
         body.name,
         body.avatar,
-        body.wallet,
         body.isAgent,
       );
 
       if (!created) {
         return reply.status(409).send({
           success: false,
-          error: "Character with this ID already exists",
+          error: "Character with this wallet already exists",
         });
       }
 
@@ -207,10 +217,10 @@ export function registerCharacterRoutes(
       return reply.send({
         success: true,
         character: {
-          id: characterId,
+          id: characterId, // wallet IS the ID
           name: body.name,
           avatar: body.avatar,
-          wallet: body.wallet,
+          wallet: characterId, // id IS the wallet
           isAgent: body.isAgent || false,
         },
       });

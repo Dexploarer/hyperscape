@@ -4,9 +4,13 @@
  * REST API endpoints for generating permanent authentication credentials for AI agents.
  * Agents need long-lived tokens to connect autonomously without user intervention.
  *
+ * **ID Format** (post-migration 0008):
+ * - characterId = wallet address (e.g., "0x1234...abcd")
+ * - Character ID IS the wallet address now
+ *
  * Security Model:
  * - Only Privy-authenticated users can create agent credentials
- * - Credentials are tied to specific characterId + userId pairs
+ * - Credentials are tied to specific characterId (wallet) + userId pairs
  * - JWTs are server-signed and cryptographically secure
  * - Agents are clearly marked with isAgent flag
  *

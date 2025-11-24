@@ -160,10 +160,15 @@ export const entities = pgTable("entities", {
  *
  * **Design**:
  * - Each user (account) can have multiple characters
- * - character.id is the primary key (UUID)
+ * - character.id IS the wallet address (Privy HD wallet, index 0)
  * - accountId links to users.id
  * - All levels default to 1, constitution defaults to 10
  * - Constitution XP starts at 1154 (level 10)
+ *
+ * **ID Format** (post-migration 0008):
+ * - character.id = wallet address (e.g., "0x1234...abcd")
+ * - Wallet must be derived BEFORE character creation
+ * - No separate wallet column needed - id IS the wallet
  *
  * **Skills**:
  * Combat: attack, strength, defense, constitution (health), ranged
@@ -176,6 +181,8 @@ export const entities = pgTable("entities", {
 export const characters = pgTable(
   "characters",
   {
+    // ID is the wallet address (Privy HD wallet)
+    // Format: "0x..." Ethereum address
     id: text("id").primaryKey(),
     accountId: text("accountId").notNull(),
     name: text("name").notNull(),
@@ -223,16 +230,14 @@ export const characters = pgTable(
 
     lastLogin: bigint("lastLogin", { mode: "number" }).default(0),
 
-    // Avatar and wallet
+    // Avatar URL for VRM model
     avatar: text("avatar"),
-    wallet: text("wallet"),
 
     // Agent flag - true if this character is controlled by an AI agent (ElizaOS)
     isAgent: integer("isAgent").default(0).notNull(), // SQLite: 0=false, 1=true
   },
   (table) => ({
     accountIdx: index("idx_characters_account").on(table.accountId),
-    walletIdx: index("idx_characters_wallet").on(table.wallet),
     isAgentIdx: index("idx_characters_is_agent").on(table.isAgent),
   }),
 );

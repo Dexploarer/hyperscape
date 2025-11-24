@@ -4,6 +4,10 @@
  * Handles all player-related database operations including stats, levels, XP,
  * health, coins, and position. This is the core persistence for character progression.
  *
+ * **ID Format** (post-migration 0008):
+ * - playerId = wallet address (e.g., "0x1234...abcd")
+ * - All methods use playerId which IS the wallet address
+ *
  * Responsibilities:
  * - Load player data from database
  * - Save/update player data (partial updates supported)

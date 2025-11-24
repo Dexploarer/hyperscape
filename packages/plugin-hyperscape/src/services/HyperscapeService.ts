@@ -7,6 +7,10 @@
  * - Provides API for executing game commands
  * - Handles automatic reconnection on disconnect
  * - Broadcasts game events to registered handlers
+ *
+ * **ID Format** (post-migration 0008):
+ * - HYPERSCAPE_CHARACTER_ID = wallet address (e.g., "0x1234...abcd")
+ * - Character ID IS the wallet address now
  */
 
 import { Service, logger, type IAgentRuntime } from "@elizaos/core";

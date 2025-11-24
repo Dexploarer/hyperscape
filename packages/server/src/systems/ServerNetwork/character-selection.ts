@@ -18,7 +18,6 @@ import type {
 } from "../../shared/types";
 import {
   EventType,
-  uuid,
   getItem,
   TerrainSystem,
   Entity,
@@ -154,10 +153,10 @@ async function createElizaOSAgent(
 }
 
 interface CharacterData {
-  id: string;
+  id: string; // ID IS the wallet address
   name: string;
   avatar?: string | null;
-  wallet?: string | null;
+  wallet: string; // Always present - same as id
   isAgent?: boolean;
   level?: number;
   lastLocation?: { x: number; y: number; z: number };
@@ -165,6 +164,9 @@ interface CharacterData {
 
 /**
  * Load character list for an account
+ *
+ * Note: Character ID IS the wallet address (post-migration 0008).
+ * The `wallet` field equals `id` for backwards compatibility.
  */
 export async function loadCharacterList(
   accountId: string,
@@ -177,10 +179,10 @@ export async function loadCharacterList(
     if (!databaseSystem) return [];
     const chars = await databaseSystem.getCharactersAsync(accountId);
     return chars.map((c) => ({
-      id: c.id,
+      id: c.id, // ID IS the wallet
       name: c.name,
       avatar: c.avatar || null,
-      wallet: c.wallet || null,
+      wallet: c.id, // wallet equals id (post-migration 0008)
       isAgent: c.isAgent || false, // CRITICAL: Include isAgent flag for routing
     }));
   } catch {
@@ -218,6 +220,9 @@ export async function handleCharacterListRequest(
 
 /**
  * Handle character creation request from client
+ *
+ * **IMPORTANT**: Wallet address is REQUIRED and IS the character ID.
+ * The client must derive the wallet from Privy BEFORE calling character creation.
  */
 export async function handleCharacterCreate(
   socket: ServerSocket,
@@ -255,21 +260,34 @@ export async function handleCharacterCreate(
     isAgent,
   });
 
+  // CRITICAL: Wallet is REQUIRED - it IS the character ID
+  if (!wallet || wallet.trim() === "") {
+    console.error(
+      "[CharacterSelection] ❌ ERROR: No wallet address provided!",
+      socket.id,
+    );
+    sendToFn(socket.id, "showToast", {
+      message: "Wallet address is required to create a character",
+      type: "error",
+    });
+    return;
+  }
+
   // Basic validation: alphanumeric plus spaces, 3-50 chars
   const safeName = name.replace(/[^a-zA-Z0-9 ]/g, "").trim();
   const finalName = safeName.length >= 3 ? safeName : "Adventurer";
 
   console.log("[CharacterSelection] Final validated name:", finalName);
 
-  const id = uuid();
+  // Character ID IS the wallet address
+  const characterId = wallet;
   const accountId = socket.accountId || "";
 
   console.log("[CharacterSelection] Character creation params:", {
-    characterId: id,
+    characterId, // wallet IS the ID
     accountId,
     finalName,
     avatar,
-    wallet,
     isAgent,
   });
 
@@ -298,21 +316,21 @@ export async function handleCharacterCreate(
       return;
     }
 
+    // Wallet IS the character ID now (post-migration 0008)
     const result = await databaseSystem.createCharacter(
       accountId,
-      id,
+      wallet, // Wallet IS the character ID
       finalName,
       avatar,
-      wallet,
       isAgent,
     );
 
     if (!result) {
       console.error(
-        "[CharacterSelection] ❌ createCharacter returned false - character may already exist",
+        "[CharacterSelection] ❌ createCharacter returned false - wallet/character may already exist",
       );
       sendToFn(socket.id, "showToast", {
-        message: "Character creation failed",
+        message: "Character creation failed - wallet already has a character",
         type: "error",
       });
       return;
@@ -335,9 +353,9 @@ export async function handleCharacterCreate(
   }
 
   const responseData = {
-    id,
+    id: characterId, // wallet IS the character ID
     name: finalName,
-    wallet: wallet || undefined,
+    wallet: characterId, // id IS the wallet, include for backwards compatibility
     avatar: avatar || undefined,
   };
 
@@ -479,14 +497,19 @@ export async function handleEnterWorld(
   }
 
   // Load character data from DB if characterId provided
+  // Note: characterId IS the wallet address (post-migration 0008)
   let name = "Adventurer";
   let avatar: string | undefined = undefined;
-  let walletAddress: string | undefined = undefined;
+  // walletAddress is the same as characterId now
+  let walletAddress: string | undefined = characterId || undefined;
   let characterData: {
-    id: string;
+    id: string; // ID IS the wallet
     name: string;
     avatar?: string | null;
-    wallet?: string | null;
+    wallet: string; // Always present - same as id
+    isAgent?: boolean;
+    combatLevel?: number | null;
+    constitutionLevel?: number | null;
   } | null = null;
   if (characterId && accountId) {
     try {
@@ -499,14 +522,17 @@ export async function handleEnterWorld(
           "[CharacterSelection] Loaded characters for account:",
           characters,
         );
-        characterData = characters.find((c) => c.id === characterId) || null;
+        const foundChar = characters.find((c) => c.id === characterId);
+        characterData = foundChar ? { ...foundChar } : null;
         if (characterData) {
           name = characterData.name;
           avatar = characterData.avatar || undefined;
-          walletAddress = characterData.wallet || undefined;
+          // walletAddress is the same as characterId (post-migration 0008)
+          walletAddress = characterId;
           console.log("[CharacterSelection] ✅ Found character:", {
             name,
             avatar,
+            wallet: walletAddress,
           });
         } else {
           // Character not found - fail fast instead of auto-creating with wrong data

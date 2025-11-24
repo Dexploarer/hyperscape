@@ -5,6 +5,11 @@
  * Each account can have multiple characters. Characters represent individual
  * player avatars in the game.
  *
+ * **ID Format** (post-migration 0008):
+ * - character.id = wallet address (e.g., "0x1234...abcd")
+ * - Wallet must be derived BEFORE character creation
+ * - No separate wallet column - id IS the wallet
+ *
  * Responsibilities:
  * - Get list of characters for an account
  * - Create new characters with default stats
@@ -29,15 +34,18 @@ export class CharacterRepository extends BaseRepository {
    * Retrieves a list of all characters (avatars) owned by a specific account.
    * Used to populate the character selection screen.
    *
+   * Note: The character id IS the wallet address (post-migration 0008).
+   * The returned `wallet` field equals `id` for backwards compatibility.
+   *
    * @param accountId - The account/user ID to fetch characters for
-   * @returns Array of characters with id and name
+   * @returns Array of characters with id (wallet), name, etc.
    */
   async getCharactersAsync(accountId: string): Promise<
     Array<{
       id: string;
       name: string;
       avatar?: string | null;
-      wallet?: string | null;
+      wallet: string; // id IS the wallet, always present
       isAgent?: boolean;
       combatLevel?: number | null;
       constitutionLevel?: number | null;
@@ -55,7 +63,6 @@ export class CharacterRepository extends BaseRepository {
         id: schema.characters.id,
         name: schema.characters.name,
         avatar: schema.characters.avatar,
-        wallet: schema.characters.wallet,
         isAgent: schema.characters.isAgent,
         combatLevel: schema.characters.combatLevel,
         constitutionLevel: schema.characters.constitutionLevel,
@@ -71,8 +78,10 @@ export class CharacterRepository extends BaseRepository {
     );
 
     // Convert isAgent from number (0/1) to boolean
+    // id IS the wallet address now
     return results.map((char) => ({
       ...char,
+      wallet: char.id, // id IS the wallet
       isAgent: char.isAgent === 1,
     }));
   }
@@ -83,43 +92,50 @@ export class CharacterRepository extends BaseRepository {
    * Creates a new character (avatar) for an account with default starting stats.
    * Characters start at level 1 in all skills with initial health and position.
    *
+   * **IMPORTANT**: The wallet address IS the character ID. Wallet must be
+   * derived from Privy BEFORE calling this method.
+   *
    * @param accountId - The account that owns this character
-   * @param id - Unique character ID (usually a UUID)
+   * @param wallet - Privy HD wallet address - THIS IS THE CHARACTER ID
    * @param name - Display name for the character (validated by caller)
-   * @param avatar - Avatar VRM URL
-   * @param wallet - Privy HD wallet address
+   * @param avatar - Avatar VRM URL (optional)
    * @param isAgent - Whether this character is controlled by an AI agent (default: false)
-   * @returns true if created successfully, false if character ID already exists
+   * @returns true if created successfully, false if wallet/character already exists
    */
   async createCharacter(
     accountId: string,
-    id: string,
+    wallet: string,
     name: string,
     avatar?: string,
-    wallet?: string,
     isAgent?: boolean,
   ): Promise<boolean> {
     this.ensureDatabase();
 
+    // Wallet is REQUIRED - it's the character ID
+    if (!wallet || wallet.trim() === "") {
+      console.error(
+        "[CharacterRepository] ❌ Cannot create character without wallet address",
+      );
+      throw new Error("Wallet address is required for character creation");
+    }
+
     const now = Date.now();
 
     console.log("[CharacterRepository] 🎭 Creating character:", {
-      id,
+      id: wallet, // id IS the wallet
       accountId,
       name,
       avatar,
-      wallet,
       isAgent: isAgent || false,
       timestamp: now,
     });
 
     try {
       await this.db.insert(schema.characters).values({
-        id,
+        id: wallet, // Wallet IS the character ID
         accountId,
         name,
         avatar,
-        wallet,
         isAgent: isAgent ? 1 : 0, // Convert boolean to integer for SQLite/PostgreSQL
         createdAt: now,
         lastLogin: now,
@@ -133,7 +149,7 @@ export class CharacterRepository extends BaseRepository {
       const verify = await this.db
         .select()
         .from(schema.characters)
-        .where(eq(schema.characters.id, id))
+        .where(eq(schema.characters.id, wallet))
         .limit(1);
 
       console.log(
@@ -155,7 +171,7 @@ export class CharacterRepository extends BaseRepository {
         error.code === "23505"
       ) {
         console.log(
-          "[CharacterRepository] Character already exists (duplicate key)",
+          "[CharacterRepository] Character already exists (duplicate wallet)",
         );
         return false;
       }

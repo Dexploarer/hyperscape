@@ -268,21 +268,29 @@ export class DatabaseSystem extends SystemBase {
   /**
    * Create a new character
    * Delegates to CharacterRepository
+   *
+   * **IMPORTANT**: The wallet address IS the character ID (post-migration 0008).
+   * Wallet must be derived from Privy BEFORE calling this method.
+   *
+   * @param accountId - The account that owns this character
+   * @param wallet - Privy HD wallet address - THIS IS THE CHARACTER ID
+   * @param name - Display name for the character
+   * @param avatar - Avatar VRM URL (optional)
+   * @param isAgent - Whether this character is controlled by an AI agent (default: false)
+   * @returns true if created successfully, false if wallet/character already exists
    */
   async createCharacter(
     accountId: string,
-    id: string,
+    wallet: string,
     name: string,
     avatar?: string,
-    wallet?: string,
     isAgent?: boolean,
   ): Promise<boolean> {
     return this.characterRepository.createCharacter(
       accountId,
-      id,
+      wallet, // Wallet IS the character ID
       name,
       avatar,
-      wallet,
       isAgent,
     );
   }

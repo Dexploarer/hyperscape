@@ -28,10 +28,14 @@ export type { SystemDatabase } from "@hyperscape/shared";
  *
  * Contains all persistent character data including stats, position, and progress.
  * Used by DatabaseSystem for loading/saving player state.
+ *
+ * **ID Format** (post-migration 0008):
+ * - playerId/id = wallet address (e.g., "0x1234...abcd")
+ * - Character ID IS the wallet address now
  */
 export interface PlayerRow {
-  playerId: string;
-  id: string;
+  playerId: string; // Wallet address (post-migration 0008)
+  id: string; // Same as playerId - wallet address
   accountId: string;
   name: string;
   combatLevel: number;
