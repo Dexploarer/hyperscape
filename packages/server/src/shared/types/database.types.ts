@@ -30,12 +30,12 @@ export type { SystemDatabase } from "@hyperscape/shared";
  * Used by DatabaseSystem for loading/saving player state.
  *
  * **ID Format** (post-migration 0008):
- * - playerId/id = wallet address (e.g., "0x1234...abcd")
- * - Character ID IS the wallet address now
+ * - playerId/id = wallet address (Ethereum or Solana)
+ * - API contracts unchanged - just a string identifier
  */
 export interface PlayerRow {
-  playerId: string; // Wallet address (post-migration 0008)
-  id: string; // Same as playerId - wallet address
+  playerId: string; // Wallet address (any blockchain)
+  id: string; // Same as playerId
   accountId: string;
   name: string;
   combatLevel: number;

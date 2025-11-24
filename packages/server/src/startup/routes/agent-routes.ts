@@ -5,8 +5,8 @@
  * Agents need long-lived tokens to connect autonomously without user intervention.
  *
  * **ID Format** (post-migration 0008):
- * - characterId = wallet address (e.g., "0x1234...abcd")
- * - Character ID IS the wallet address now
+ * - characterId = wallet address (Ethereum or Solana)
+ * - API unchanged - characterId is just a string identifier
  *
  * Security Model:
  * - Only Privy-authenticated users can create agent credentials

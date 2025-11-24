@@ -9,8 +9,8 @@
  * - Broadcasts game events to registered handlers
  *
  * **ID Format** (post-migration 0008):
- * - HYPERSCAPE_CHARACTER_ID = wallet address (e.g., "0x1234...abcd")
- * - Character ID IS the wallet address now
+ * - HYPERSCAPE_CHARACTER_ID = wallet address (Ethereum or Solana)
+ * - Just a string identifier - no format validation needed
  */
 
 import { Service, logger, type IAgentRuntime } from "@elizaos/core";

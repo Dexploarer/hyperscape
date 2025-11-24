@@ -166,9 +166,10 @@ export const entities = pgTable("entities", {
  * - Constitution XP starts at 1154 (level 10)
  *
  * **ID Format** (post-migration 0008):
- * - character.id = wallet address (e.g., "0x1234...abcd")
+ * - character.id = wallet address (Ethereum 0x... or Solana base58)
  * - Wallet must be derived BEFORE character creation
  * - No separate wallet column needed - id IS the wallet
+ * - API contracts unchanged - characterId is just a string identifier
  *
  * **Skills**:
  * Combat: attack, strength, defense, constitution (health), ranged
@@ -182,7 +183,7 @@ export const characters = pgTable(
   "characters",
   {
     // ID is the wallet address (Privy HD wallet)
-    // Format: "0x..." Ethereum address
+    // Format: Ethereum "0x..." or Solana base58 address
     id: text("id").primaryKey(),
     accountId: text("accountId").notNull(),
     name: text("name").notNull(),

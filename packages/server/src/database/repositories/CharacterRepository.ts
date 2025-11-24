@@ -6,9 +6,10 @@
  * player avatars in the game.
  *
  * **ID Format** (post-migration 0008):
- * - character.id = wallet address (e.g., "0x1234...abcd")
+ * - character.id = wallet address (Ethereum or Solana)
  * - Wallet must be derived BEFORE character creation
  * - No separate wallet column - id IS the wallet
+ * - API unchanged - characterId is just a string
  *
  * Responsibilities:
  * - Get list of characters for an account
