@@ -27,13 +27,14 @@ import {
 /**
  * Create an ElizaOS agent record for a character
  * This allows the character to appear in the dashboard and be managed as an agent
+ *
+ * Note: characterId IS the wallet address (post-migration 0008)
  */
 async function createElizaOSAgent(
-  characterId: string,
+  characterId: string, // This IS the wallet address
   accountId: string,
   name: string,
   avatar?: string,
-  wallet?: string,
   isAgent?: boolean,
 ): Promise<void> {
   try {
@@ -88,11 +89,12 @@ async function createElizaOSAgent(
 
       settings: {
         secrets: {
+          // characterId IS the wallet address (post-migration 0008)
           HYPERSCAPE_CHARACTER_ID: characterId,
           HYPERSCAPE_SERVER_URL:
             process.env.PUBLIC_WS_URL || "ws://localhost:5555/ws",
           HYPERSCAPE_ACCOUNT_ID: accountId, // Link to user's account
-          wallet,
+          wallet: characterId, // wallet = characterId (post-migration 0008)
         },
         avatar,
         characterType: isAgent ? "ai-agent" : "human-player",

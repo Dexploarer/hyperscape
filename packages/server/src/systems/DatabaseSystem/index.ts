@@ -252,14 +252,18 @@ export class DatabaseSystem extends SystemBase {
   /**
    * Get all characters for an account
    * Delegates to CharacterRepository
+   *
+   * Note: wallet equals id (post-migration 0008)
    */
   async getCharactersAsync(accountId: string): Promise<
     Array<{
       id: string;
       name: string;
       avatar?: string | null;
-      wallet?: string | null;
+      wallet: string; // id IS the wallet, always present
       isAgent?: boolean;
+      combatLevel?: number | null;
+      constitutionLevel?: number | null;
     }>
   > {
     return this.characterRepository.getCharactersAsync(accountId);
