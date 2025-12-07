@@ -16,7 +16,7 @@ export function Badge({
     success: "bg-neon-green/10 text-neon-green border-neon-green/20",
     warning: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
     destructive: "bg-red-500/10 text-red-500 border-red-500/20",
-    outline: "bg-transparent border-glass-border text-gray-400",
+    outline: "bg-transparent border-border text-muted",
   };
 
   return (

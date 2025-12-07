@@ -7,14 +7,14 @@
     /* Light Mode: "Clean Room" - Industrial Constructivist */
     /* Sterile engineering lab with Safety Orange accents */
     --background: 98% 0.01 240; /* Ceramic White */
-    --foreground: 20% 0.02 260; /* Dark Slate (high contrast) */
+    --foreground: 15% 0.02 260; /* Very Dark Slate - HIGH CONTRAST */
 
-    --glass-bg: 95% 0.01 240; /* Platinum Grey */
-    --glass-border: 85% 0 0; /* Matte Aluminum */
+    --glass-bg: 85% 0.01 240; /* Much darker grey for clear contrast */
+    --glass-border: 65% 0 0; /* Dark border for definition */
 
-    --neon-blue: 60% 0.15 240; /* Technical Blueprint Blue */
-    --neon-purple: 65% 0.25 45; /* Safety Orange / Industrial Amber */
-    --neon-green: 55% 0.18 150; /* Success Green */
+    --neon-blue: 40% 0.15 240; /* Darker Technical Blueprint Blue */
+    --neon-purple: 45% 0.25 45; /* Darker Safety Orange for better contrast */
+    --neon-green: 40% 0.18 150; /* Darker Success Green */
 
     --radius: 0.25rem; /* Sharp 4px corners - machined look */
   }

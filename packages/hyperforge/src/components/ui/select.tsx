@@ -48,7 +48,7 @@ export function Select({
   return (
     <div className="w-full flex flex-col gap-1.5" ref={containerRef}>
       {label && (
-        <label className="text-xs text-gray-400 uppercase tracking-wider font-semibold ml-1">
+        <label className="text-xs text-muted uppercase tracking-wider font-semibold ml-1">
           {label}
         </label>
       )}
@@ -57,17 +57,21 @@ export function Select({
           type="button"
           onClick={() => setIsOpen(!isOpen)}
           className={cn(
-            "flex items-center justify-between w-full h-10 px-3 py-2 rounded-md border border-glass-border bg-black/20 text-sm text-left transition-all",
+            "flex items-center justify-between w-full h-10 px-3 py-2 rounded-md border border-input bg-glass-bg/50 text-sm text-left transition-all",
             "focus:outline-none focus:border-neon-blue focus:ring-1 focus:ring-neon-blue/50",
             isOpen && "border-neon-blue ring-1 ring-neon-blue/50",
           )}
         >
-          <span className={!selectedOption ? "text-gray-500" : "text-white"}>
+          <span
+            className={
+              !selectedOption ? "text-muted-foreground" : "text-foreground"
+            }
+          >
             {selectedOption ? selectedOption.label : placeholder}
           </span>
           <ChevronDown
             className={cn(
-              "w-4 h-4 text-gray-400 transition-transform",
+              "w-4 h-4 text-muted transition-transform",
               isOpen && "transform rotate-180",
             )}
           />
@@ -88,10 +92,10 @@ export function Select({
                       setIsOpen(false);
                     }}
                     className={cn(
-                      "flex items-center justify-between w-full px-3 py-2 text-sm text-left hover:bg-white/10 transition-colors",
+                      "flex items-center justify-between w-full px-3 py-2 text-sm text-left hover:bg-foreground/10 transition-colors",
                       option.value === value
                         ? "text-neon-blue bg-neon-blue/5"
-                        : "text-gray-300",
+                        : "text-muted",
                     )}
                   >
                     {option.label}

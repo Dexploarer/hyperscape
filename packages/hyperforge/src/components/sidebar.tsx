@@ -23,7 +23,7 @@ export function Sidebar() {
     >
       {/* Logo Area */}
       <div className="flex items-center gap-2 px-2 py-4 mb-6">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-neon-blue to-neon-purple flex items-center justify-center font-bold text-black border border-white/20 shadow-[0_0_15px_rgba(188,19,254,0.5)]">
+        <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-neon-blue to-neon-purple flex items-center justify-center font-bold text-background border border-border molten-glow">
           HF
         </div>
         <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 tracking-wider">

@@ -28,7 +28,7 @@ export function AssetCard({
       border
     >
       {/* Thumbnail */}
-      <div className="relative flex-1 bg-black/40 overflow-hidden">
+      <div className="relative flex-1 bg-glass-bg/50 overflow-hidden">
         {thumbnailUrl ? (
           <Image
             src={thumbnailUrl}
@@ -37,19 +37,19 @@ export function AssetCard({
             className="object-cover opacity-80 group-hover:opacity-100 transition-opacity"
           />
         ) : (
-          <div className="flex items-center justify-center w-full h-full text-gray-500 text-xs uppercase tracking-widest">
+          <div className="flex items-center justify-center w-full h-full text-muted-foreground text-xs uppercase tracking-widest">
             No Preview
           </div>
         )}
 
         {/* Status Badge */}
-        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-black/60 border border-white/10 backdrop-blur-md">
+        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-glass-bg border border-border backdrop-blur-md">
           <span
             className={
               status === "ready"
                 ? "text-neon-blue"
                 : status === "processing"
-                  ? "text-yellow-400"
+                  ? "text-accent"
                   : "text-red-500"
             }
           >
@@ -59,8 +59,8 @@ export function AssetCard({
       </div>
 
       {/* Info & Actions */}
-      <div className="p-3 bg-black/60 flex flex-col gap-2">
-        <h3 className="text-sm font-medium text-white truncate">{name}</h3>
+      <div className="p-3 bg-glass-bg flex flex-col gap-2">
+        <h3 className="text-sm font-medium text-foreground truncate">{name}</h3>
         <div className="flex gap-2 mt-1">
           <SpectacularButton
             variant="ghost"
@@ -76,7 +76,7 @@ export function AssetCard({
           <SpectacularButton
             variant="ghost"
             size="sm"
-            className="w-8 px-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+            className="w-8 px-0 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
             onClick={(e) => {
               e.stopPropagation();
               onDelete?.();

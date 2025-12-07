@@ -22,12 +22,13 @@ export const SpectacularButton = forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     const variants = {
       primary:
-        "bg-neon-blue/10 text-neon-blue border border-neon-blue/50 hover:bg-neon-blue/20 hover:border-neon-blue",
+        "bg-accent/10 text-foreground border border-accent/50 hover:bg-accent/20 hover:border-accent font-semibold",
       secondary:
-        "bg-glass-bg text-white border border-glass-border hover:bg-white/10",
-      ghost: "bg-transparent text-gray-400 hover:text-white hover:bg-white/5",
+        "bg-glass-bg text-foreground border border-border hover:bg-foreground/10",
+      ghost:
+        "bg-transparent text-muted hover:text-foreground hover:bg-foreground/5",
       danger:
-        "bg-red-500/10 text-red-500 border border-red-500/50 hover:bg-red-500/20",
+        "bg-destructive/10 text-destructive border border-destructive/50 hover:bg-destructive/20",
     };
 
     const sizes = {
@@ -40,7 +41,7 @@ export const SpectacularButton = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={cn(
-          "relative inline-flex items-center justify-center rounded-lg transition-all duration-200 outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed",
+          "relative inline-flex items-center justify-center rounded-lg transition-all duration-200 outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed",
           variants[variant],
           sizes[size],
           glow &&

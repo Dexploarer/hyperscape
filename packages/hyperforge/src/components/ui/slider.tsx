@@ -42,7 +42,7 @@ export function Slider({
       />
 
       {/* Track Background */}
-      <div className="absolute w-full h-1 bg-white/10 rounded-full overflow-hidden z-10">
+      <div className="absolute w-full h-1 bg-foreground/10 rounded-full overflow-hidden z-10">
         {/* Fill */}
         <div
           className="h-full bg-neon-blue transition-all"

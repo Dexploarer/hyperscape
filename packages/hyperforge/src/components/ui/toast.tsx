@@ -110,17 +110,17 @@ function ToastViewport() {
               </div>
               <div className="grid gap-1 flex-1">
                 {t.title && (
-                  <h3 className="text-sm font-semibold text-white">
+                  <h3 className="text-sm font-semibold text-foreground">
                     {t.title}
                   </h3>
                 )}
                 {t.description && (
-                  <p className="text-xs text-gray-400">{t.description}</p>
+                  <p className="text-xs text-muted">{t.description}</p>
                 )}
               </div>
               <button
                 onClick={() => dismiss(t.id)}
-                className="text-gray-400 hover:text-white transition-colors"
+                className="text-muted hover:text-foreground transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>

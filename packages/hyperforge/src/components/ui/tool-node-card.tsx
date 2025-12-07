@@ -27,8 +27,8 @@ export function ToolNodeCard({
       intensity="medium"
     >
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-white">
-          <div className="p-1.5 rounded-md bg-white/10 text-neon-blue">
+        <div className="flex items-center gap-2 text-foreground">
+          <div className="p-1.5 rounded-md bg-foreground/10 text-neon-blue">
             {icon}
           </div>
           <span className="font-semibold text-sm">{title}</span>
@@ -40,17 +40,17 @@ export function ToolNodeCard({
           <CheckCircle2 className="w-4 h-4 text-neon-green" />
         )}
         {status === "failed" && (
-          <AlertCircle className="w-4 h-4 text-red-500" />
+          <AlertCircle className="w-4 h-4 text-destructive" />
         )}
       </div>
 
       {description && (
-        <p className="text-xs text-gray-400 leading-relaxed">{description}</p>
+        <p className="text-xs text-muted leading-relaxed">{description}</p>
       )}
 
       {/* Progress Bar (Mock) */}
       {status === "running" && (
-        <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
+        <div className="h-1 w-full bg-foreground/10 rounded-full overflow-hidden">
           <div className="h-full bg-neon-blue w-1/2 animate-pulse" />
         </div>
       )}

@@ -31,7 +31,7 @@ export function Modal({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
             onClick={onClose}
           />
 
@@ -44,13 +44,13 @@ export function Modal({
           >
             <GlassPanel intensity="high" className="flex flex-col max-h-[90vh]">
               {/* Header */}
-              <div className="flex items-center justify-between p-4 border-b border-white/10">
-                <h2 className="text-lg font-bold text-white tracking-wide text-glow">
+              <div className="flex items-center justify-between p-4 border-b border-border">
+                <h2 className="text-lg font-bold text-foreground tracking-wide">
                   {title}
                 </h2>
                 <button
                   onClick={onClose}
-                  className="p-1 text-gray-400 hover:text-white transition-colors"
+                  className="p-1 text-muted hover:text-foreground transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -63,7 +63,7 @@ export function Modal({
 
               {/* Footer */}
               {footer && (
-                <div className="flex justify-end gap-3 p-4 border-t border-white/10 bg-black/20">
+                <div className="flex justify-end gap-3 p-4 border-t border-border bg-glass-bg/50">
                   {footer}
                 </div>
               )}
