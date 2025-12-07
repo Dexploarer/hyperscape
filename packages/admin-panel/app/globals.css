@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+@theme {
+  /* Animation */
+  --animate-fade-in: fade-in 0.3s ease-out;
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+:root {
+  /* Default: Royal Command (Light) */
+  --bg-app: oklch(96% 0.01 90); /* Cream */
+  --bg-panel: oklch(93% 0.01 90); /* Silver */
+  --color-primary: oklch(25% 0.1 260); /* Deep Sapphire */
+  --color-primary-fg: oklch(98% 0 0); /* White Text */
+  --color-secondary: oklch(60% 0.05 260); /* Muted Sapphire */
+  --color-accent: oklch(85% 0.1 85); /* Gold Accent */
+
+  --border-thin: oklch(85% 0.02 90); /* Thin Silver */
+  --border-strong: oklch(25% 0.1 260); /* Strong Sapphire */
+
+  --color-destructive: oklch(55% 0.2 25); /* Warning Red */
+  --color-destructive-foreground: oklch(98% 0 0);
+
+  --foreground: oklch(20% 0.02 260);
+  --muted-foreground: oklch(50% 0.02 260);
+
+  --font-mono: "Geist Mono", monospace;
+}
+
+[data-theme="dark"] {
+  /* Shadow Ops (Dark) */
+  --bg-app: oklch(15% 0.02 260); /* Charcoal */
+  --bg-panel: oklch(20% 0.02 260); /* Lighter Charcoal */
+  --color-primary: oklch(45% 0.15 30); /* Deep Ruby */
+  --color-primary-fg: oklch(98% 0 0);
+  --color-secondary: oklch(75% 0.15 85); /* Gold */
+
+  --border-thin: oklch(30% 0 0); /* Dark Silver */
+  --border-strong: oklch(45% 0.15 30); /* Ruby Border */
+
+  --color-destructive: oklch(
+    60% 0.2 25
+  ); /* Brighter Warning Red for dark mode */
+  --color-destructive-foreground: oklch(98% 0 0);
+
+  --foreground: oklch(90% 0 0);
+  --muted-foreground: oklch(60% 0 0);
+}
+
+body {
+  background-color: var(--bg-app);
+  background-image: linear-gradient(
+    to bottom right,
+    var(--bg-app),
+    var(--bg-panel)
+  );
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  overflow: hidden;
+}
+
+/* Tactical Utility Classes */
+.panel-tech {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-thin);
+  position: relative;
+}
+
+/* Scientific/Tactical Lines */
+.panel-tech::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid var(--border-strong);
+  border-left: 2px solid var(--border-strong);
+}
+.panel-tech::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 8px;
+  height: 8px;
+  border-bottom: 2px solid var(--border-strong);
+  border-right: 2px solid var(--border-strong);
+}
+
+.btn-command {
+  border: 1px solid var(--border-thin);
+  background: transparent;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.75rem;
+  transition: all 0.2s;
+}
+.btn-command:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-primary-fg);
+  box-shadow: 0 0 15px var(--color-primary);
+}
