@@ -1318,51 +1318,32 @@ Your task is to enhance the user's description to create better results with ima
       : `Enhance this ${config.type} asset description for 3D generation: "${baseDescription}"`;
 
     try {
-      // Select endpoint and auth based on available API keys
-      const endpoint = useAIGateway
-        ? "https://ai-gateway.vercel.sh/v1/chat/completions"
-        : "https://api.openai.com/v1/chat/completions";
+      // Use AI SDK for GPT-4 enhancement via AI Gateway
+      const { generateText } = await import("ai");
 
-      const apiKey = useAIGateway
-        ? process.env.AI_GATEWAY_API_KEY!
-        : process.env.OPENAI_API_KEY!;
-
-      const modelName = useAIGateway
-        ? "openai/gpt-4o" // AI Gateway uses provider/model format
-        : "gpt-4"; // Direct OpenAI uses just the model name
-
-      console.log(
-        `🤖 Using ${useAIGateway ? "Vercel AI Gateway" : "direct OpenAI API"} for GPT-4 enhancement`,
-      );
-
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: modelName,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-          temperature: 0.7,
-          max_tokens: 200,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`GPT-4 API error: ${response.status}`);
+      if (!process.env.AI_GATEWAY_API_KEY) {
+        throw new Error("AI_GATEWAY_API_KEY required for GPT-4 enhancement");
       }
 
-      const data = (await response.json()) as GPT4ChatResponse;
-      const optimizedPrompt = data.choices[0].message.content.trim();
+      const modelName = "openai/gpt-4o"; // AI Gateway uses provider/model format
+
+      console.log(`🤖 Using Vercel AI Gateway for GPT-4 enhancement`);
+
+      const result = await generateText({
+        model: modelName,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.7,
+      });
+
+      const optimizedPrompt = result.text.trim();
 
       return {
         originalPrompt: config.description,
         optimizedPrompt,
-        model: "gpt-4",
+        model: "gpt-4o",
         keywords: this.extractKeywords(optimizedPrompt),
       };
     } catch (error) {

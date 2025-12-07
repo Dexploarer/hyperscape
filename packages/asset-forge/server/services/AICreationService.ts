@@ -174,16 +174,12 @@ export class AICreationService {
 // ==================== Image Generation Service ====================
 
 class ImageGenerationService {
-  private apiKey: string;
   private model: string;
   private imageServerBaseUrl?: string;
-  private fetchFn: FetchFunction;
 
   constructor(config: OpenAIConfig) {
-    this.apiKey = config.apiKey;
-    this.model = config.model || "gpt-image-1";
+    this.model = config.model || "google/gemini-2.5-flash-image";
     this.imageServerBaseUrl = config.imageServerBaseUrl;
-    this.fetchFn = config.fetchFn || fetch;
   }
 
   async generateImage(
@@ -191,14 +187,11 @@ class ImageGenerationService {
     assetType: string,
     style?: string,
   ): Promise<ImageGenerationResult> {
-    // Check for Vercel AI Gateway or direct OpenAI API
-    const useAIGateway = !!process.env.AI_GATEWAY_API_KEY;
-    const useDirectOpenAI = !!process.env.OPENAI_API_KEY;
+    // Import AI SDK for image generation
+    const { generateText } = await import("ai");
 
-    if (!useAIGateway && !useDirectOpenAI) {
-      throw new Error(
-        "AI_GATEWAY_API_KEY or OPENAI_API_KEY required for image generation",
-      );
+    if (!process.env.AI_GATEWAY_API_KEY) {
+      throw new Error("AI_GATEWAY_API_KEY required for image generation");
     }
 
     // Load generation prompts
@@ -214,85 +207,41 @@ class ImageGenerationService {
       .replace('${style || "game-ready"}', style || "game-ready")
       .replace("${assetType}", assetType);
 
-    // AI Gateway uses chat completions for image generation (gpt-5-nano, gemini-2.5-flash-image)
-    // Direct OpenAI uses images/generations endpoint (dall-e, gpt-image-1)
-    const endpoint = useAIGateway
-      ? "https://ai-gateway.vercel.sh/v1/chat/completions"
-      : "https://api.openai.com/v1/images/generations";
-
-    const apiKey = useAIGateway
-      ? process.env.AI_GATEWAY_API_KEY!
-      : process.env.OPENAI_API_KEY!;
-
-    // Use google/gemini-2.5-flash-image for AI Gateway, gpt-image-1 for direct OpenAI
-    const modelName = useAIGateway
-      ? "google/gemini-2.5-flash-image"
-      : this.model;
+    // Use model from config or default to multimodal image model
+    const modelName = this.model;
 
     console.log(
-      `🎨 Using ${useAIGateway ? "Vercel AI Gateway" : "direct OpenAI API"} for image generation (model: ${modelName})`,
+      `🎨 Using Vercel AI Gateway for image generation (model: ${modelName})`,
     );
 
-    // Build request body based on endpoint type
-    const requestBody = useAIGateway
-      ? {
-          model: modelName,
-          messages: [
-            {
-              role: "user",
-              content: `Generate an image: ${prompt}`,
-            },
-          ],
-        }
-      : {
-          model: modelName,
-          prompt: prompt,
-          size: "1024x1024",
-          quality: "high",
-        };
-
-    const response = await this.fetchFn(endpoint, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
+    // Use AI SDK's generateText with multimodal image models
+    // Models like google/gemini-2.5-flash-image return images in result.files
+    const result = await generateText({
+      model: modelName,
+      prompt: `Generate an image: ${prompt}`,
     });
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(
-        `Image generation API error: ${response.status} - ${error}`,
-      );
-    }
+    // Extract images from result.files (multimodal models)
+    const imageFiles =
+      result.files?.filter((f) => f.mediaType?.startsWith("image/")) || [];
 
     let imageUrl: string;
 
-    if (useAIGateway) {
-      const data = (await response.json()) as AIGatewayImageResponse;
-      // Log the full response to debug
-      console.log("AI Gateway response:", JSON.stringify(data, null, 2));
-
-      // AI Gateway returns images in choices[0].message.images array
-      const images = data.choices?.[0]?.message?.images;
-      if (images && images.length > 0) {
-        imageUrl = images[0].image_url.url;
+    if (imageFiles.length > 0) {
+      // Convert to data URL from base64
+      const file = imageFiles[0];
+      if (file.base64) {
+        imageUrl = `data:${file.mediaType || "image/png"};base64,${file.base64}`;
+      } else if (file.uint8Array) {
+        const base64 = Buffer.from(file.uint8Array).toString("base64");
+        imageUrl = `data:${file.mediaType || "image/png"};base64,${base64}`;
       } else {
-        console.error("No images found in response. Full data:", data);
-        throw new Error("No image data returned from AI Gateway");
+        throw new Error("No image data in response files");
       }
     } else {
-      const data = (await response.json()) as OpenAIImageResponse;
-      // Direct OpenAI returns images in data array
-      const imageData = data.data?.[0];
-      if (imageData?.b64_json) {
-        imageUrl = `data:image/png;base64,${imageData.b64_json}`;
-      } else if (imageData?.url) {
-        imageUrl = imageData.url;
-      } else {
-        throw new Error("No image data returned from OpenAI API");
-      }
+      // Fallback: check if response text contains image URL (some models)
+      console.error("No images found in result.files. Full result:", result);
+      throw new Error("No image data returned from AI Gateway");
     }
 
     return {

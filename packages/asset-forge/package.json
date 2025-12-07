@@ -38,6 +38,7 @@
   "author": "Lucid",
   "license": "MIT",
   "dependencies": {
+    "@ai-sdk/gateway": "^2.0.18",
     "@elysiajs/cors": "^1.4.0",
     "@elysiajs/server-timing": "^1.4.0",
     "@elysiajs/static": "^1.4.6",
@@ -50,6 +51,7 @@
     "@tensorflow-models/hand-pose-detection": "^2.0.1",
     "@tensorflow/tfjs": "^4.22.0",
     "@tensorflow/tfjs-backend-webgl": "^4.22.0",
+    "ai": "^5.0.108",
     "chalk": "^4.1.2",
     "clsx": "^2.0.0",
     "concurrently": "^9.2.1",

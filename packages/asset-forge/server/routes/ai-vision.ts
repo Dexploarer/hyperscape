@@ -4,7 +4,6 @@
  */
 
 import { Elysia } from "elysia";
-import fetch from "node-fetch";
 import { getWeaponDetectionPrompts } from "../utils/promptLoader";
 import * as Models from "../models";
 
@@ -14,9 +13,9 @@ export const aiVisionRoutes = new Elysia({
 }).guard(
   {
     beforeHandle: ({ set }) => {
-      if (!process.env.OPENAI_API_KEY) {
+      if (!process.env.AI_GATEWAY_API_KEY) {
         set.status = 500;
-        return { success: false, error: "OpenAI API key not configured" };
+        return { success: false, error: "AI Gateway API key not configured" };
       }
     },
   },
@@ -111,51 +110,36 @@ ONLY select the cylindrical grip area where fingers would wrap around.`;
 
           promptText += responseFormat;
 
-          // Use GPT-4 Vision to analyze the weapon and identify grip location
-          const response = await fetch(
-            "https://api.openai.com/v1/chat/completions",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-              },
-              body: JSON.stringify({
-                model: "gpt-4o-mini",
-                messages: [
-                  {
-                    role: "user",
-                    content: [
-                      {
-                        type: "text",
-                        text: promptText,
-                      },
-                      {
-                        type: "image_url",
-                        image_url: { url: image, detail: "high" },
-                      },
-                    ],
-                  },
-                ],
-                max_tokens: 300,
-                temperature: 0.3,
-                response_format: { type: "json_object" },
-              }),
-            },
-          );
+          // Use AI SDK for GPT-4 Vision analysis via AI Gateway
+          const { generateText } = await import("ai");
 
-          if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`OpenAI API error: ${response.status} - ${error}`);
+          if (!process.env.AI_GATEWAY_API_KEY) {
+            throw new Error("AI_GATEWAY_API_KEY required for vision analysis");
           }
 
-          const data = (await response.json()) as {
-            choices: Array<{ message: { content: string } }>;
-          };
+          const result = await generateText({
+            model: "openai/gpt-4o-mini",
+            messages: [
+              {
+                role: "user",
+                content: [
+                  { type: "image", image: image },
+                  { type: "text", text: promptText },
+                ],
+              },
+            ],
+            temperature: 0.3,
+          });
+
           let gripData;
 
           try {
-            gripData = JSON.parse(data.choices[0].message.content);
+            // Clean JSON from response
+            let jsonStr = result.text.trim();
+            if (jsonStr.startsWith("```json")) jsonStr = jsonStr.slice(7);
+            if (jsonStr.startsWith("```")) jsonStr = jsonStr.slice(3);
+            if (jsonStr.endsWith("```")) jsonStr = jsonStr.slice(0, -3);
+            gripData = JSON.parse(jsonStr.trim());
           } catch (parseError) {
             // If parsing fails, return default values
             gripData = {
@@ -221,47 +205,36 @@ Respond with ONLY a JSON object:
   "reason": "<brief explanation of your decision>"
 }`;
 
-          const response = await fetch(
-            "https://api.openai.com/v1/chat/completions",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-              },
-              body: JSON.stringify({
-                model: "gpt-4o-mini",
-                messages: [
-                  {
-                    role: "user",
-                    content: [
-                      { type: "text", text: promptText },
-                      {
-                        type: "image_url",
-                        image_url: { url: image, detail: "high" },
-                      },
-                    ],
-                  },
-                ],
-                max_tokens: 200,
-                temperature: 0.2,
-                response_format: { type: "json_object" },
-              }),
-            },
-          );
+          // Use AI SDK for GPT-4 Vision analysis via AI Gateway
+          const { generateText } = await import("ai");
 
-          if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`OpenAI API error: ${response.status} - ${error}`);
+          if (!process.env.AI_GATEWAY_API_KEY) {
+            throw new Error("AI_GATEWAY_API_KEY required for vision analysis");
           }
 
-          const data = (await response.json()) as {
-            choices: Array<{ message: { content: string } }>;
-          };
+          const result = await generateText({
+            model: "openai/gpt-4o-mini",
+            messages: [
+              {
+                role: "user",
+                content: [
+                  { type: "image", image: image },
+                  { type: "text", text: promptText },
+                ],
+              },
+            ],
+            temperature: 0.2,
+          });
+
           let orientationData;
 
           try {
-            orientationData = JSON.parse(data.choices[0].message.content);
+            // Clean JSON from response
+            let jsonStr = result.text.trim();
+            if (jsonStr.startsWith("```json")) jsonStr = jsonStr.slice(7);
+            if (jsonStr.startsWith("```")) jsonStr = jsonStr.slice(3);
+            if (jsonStr.endsWith("```")) jsonStr = jsonStr.slice(0, -3);
+            orientationData = JSON.parse(jsonStr.trim());
           } catch (parseError) {
             orientationData = {
               needsFlip: false,
