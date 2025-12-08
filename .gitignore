@@ -81,6 +81,3 @@ clear-users.sql
 .kluster
 
 logs/*.glb
-packages/admin-panel/.next/
-packages/admin-panel/.next/cache/
-packages/admin-panel/.next/standalone/
