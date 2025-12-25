@@ -1,0 +1,26 @@
+/**
+ * Tabs Component Tests
+ *
+ * Tests for the tabs component.
+ * Uses React Testing Library with real implementations.
+ */
+
+import { describe, it, expect } from "vitest";
+import { render } from "@testing-library/react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "../tabs";
+
+describe("Tabs", () => {
+  it("renders without crashing", () => {
+    render(
+      <Tabs defaultValue="tab1">
+        <TabsList>
+          <TabsTrigger value="tab1">Tab 1</TabsTrigger>
+          <TabsTrigger value="tab2">Tab 2</TabsTrigger>
+        </TabsList>
+        <TabsContent value="tab1">Content 1</TabsContent>
+        <TabsContent value="tab2">Content 2</TabsContent>
+      </Tabs>,
+    );
+    expect(document.body).toBeTruthy();
+  });
+});
